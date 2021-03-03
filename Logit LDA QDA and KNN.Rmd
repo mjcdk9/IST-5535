@@ -1,0 +1,591 @@
+---
+title: "Logit, LDA, QDA, and KNN"
+author: "Langtao Chen"
+date: "Feb 25, 2020"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: '3'
+  pdf_document:
+    toc: yes
+    toc_depth: 3
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+&nbsp;
+&nbsp;
+
+
+\newpage
+
+
+```{r, echo=FALSE}
+# Clean the environment
+rm(list = ls())
+```
+
+In this example, we'll use the Credit Card Default dataset to demonstrate how to conduct logistic regression, LDA, QDA, and kNN classification. 
+
+# 1. Data
+
+
+```{r}
+# Load ISLR package
+library(ISLR)
+
+# Structure of the Default dataset
+str(Default)
+```
+
+The dataset contains 10,000 observations of 4 variables including:
+
+- default: A factor with levels No and Yes indicating whether the customer defaulted on their debt
+
+- student: A factor with levels No and Yes indicating whether the customer is a student
+
+- balance: The average balance that the customer has remaining on their credit card after making their monthly payment
+
+- income: Income of customer
+
+```{r}
+head(Default)
+```
+
+```{r}
+summary(Default)
+```
+
+# 2. Data Exploration
+
+```{r}
+# Frequency of default
+table(Default$default)
+```
+
+Among the 10,000 customers, 333 customers defaulted their credit card debt.
+
+```{r, fig.height=3.5}
+library(ggplot2)
+qplot(x=default, y=balance, data = Default, col= default, main = 'Boxplot 1') + 
+  geom_boxplot()
+```
+
+```{r, fig.height=3.5}
+qplot(x=student, y=balance, data = Default, col= student, main = 'Boxplot 2') + 
+  geom_boxplot()
+```
+
+We also notice that student customers have higher balance than non-student customers.
+
+From the above plot, we can notice that the distribution of balance is different across two customer groups (default = Yes vs default = No). Customers tend to default their debt when the balance is higher.
+
+```{r, fig.height=3.5}
+qplot(x=default, y=income, data = Default, col= default, main = 'Boxplot 3') + 
+  geom_boxplot()
+```
+
+From the above plot, it seems the income of the customer does not matter whether the customer defaults the debt or not.
+
+As the student and default variables are both qualitative, we can use a mosaic plot to show their relationship.
+```{r, fig.height=4}
+mosaicplot(~ student + default, data=Default, main = "Mosaic Plot", col='lightblue')
+```
+
+From the above plot, it seems student customers are more likely to default than non-student customers.
+
+Draw a scatterplot matrix of the dataset.
+
+```{r}
+pairs(~default + balance + income + student, data = Default, col = Default$default)
+```
+
+
+# 3. Logistic Regression
+
+## 3.1. Fit a Logistic Regression Model
+
+With the visualization of the relationships between predictors and the response, now let's formally use logistic regression model to analyze these relationships.
+
+First, let's fit the logistic regression model by using only one predictor balance
+
+```{r}
+# Logistic regression
+logit1.fit <- glm(default ~ balance,
+                  family=binomial(link='logit'),data = Default)
+
+summary(logit1.fit)
+```
+
+We can see that balance has a significant and positive effect on the probability (or log odds) of default. This is consistent with the conclusion of the box plot 1 above.
+
+We can visualize the default probability predicted by the fitted logistic regression model as follows.
+
+```{r}
+# Calculate predicted probability
+logit1.prob <- predict(logit1.fit, type = "response")
+
+plot(x = Default$balanc, y = ifelse(Default$default == "Yes", 1, 0), 
+     col = "orange", xlab = "Balance", ylab = "Probability of Default")
+
+points(x = Default$balance[order(Default$balance)], 
+       y = logit1.prob[order(Default$balance)], 
+       type = "l", col="blue", lwd = 2)
+```
+
+From the above plot, we find that if balance is high, the probability of default is high.
+
+First, let's fit the logistic regression model by using only one predictor student.
+
+```{r}
+# Logistic regression
+logit2.fit <- glm(default ~ student,
+                  family=binomial(link='logit'),data = Default)
+
+summary(logit2.fit)
+```
+
+We find that being a student significantly increases the probability of default. This is consistent with the conclusion of the mosaic plot above.
+
+Now, let's include balance into the modeling.
+
+```{r}
+# Logistic regression
+logit3.fit <- glm(default ~ balance + student,
+                  family=binomial(link='logit'),data = Default)
+
+summary(logit3.fit)
+```
+
+We can find that being a student significantly decreases the probability of default, after controlling for balance.
+
+Balance variable distorts the relationship between student and default. Balance is also called a confounder or confounding variable in this case.
+
+Now, let's regress default on all other variables.
+
+```{r}
+# Logistic regression
+logit.fit <- glm(default ~ balance + income + student,
+                 family=binomial(link='logit'),data = Default)
+
+summary(logit.fit)
+```
+
+```{r}
+# Get coefficient estimates
+coef(logit.fit)
+```
+```{r}
+# Get coefficient estimates with statistics
+summary(logit.fit)$coef
+```
+
+```{r}
+# Get p-values for all coefficient estimates
+summary(logit.fit)$coef[,4]
+```
+
+## 3.2. Interpret Logistic Regression
+
+Let's use the stargazer package to report regression results in a more professional way.
+
+```{r, message=FALSE}
+library(stargazer)
+```
+
+```{r, warning=FALSE}
+stargazer(logit1.fit, logit2.fit, logit3.fit, logit.fit, 
+          type = "text",star.cutoffs = c(0.05, 0.01, 0.001),
+          title="Logistic Regression", digits=4)
+```
+
+Comparing the simple logistic regression (including only one predictor student) and the full model (including all predictors), we can find that there is a confounding due to the high correlation between student and balance.  
+
+Interpretation of the full model of logistic regression is:
+
+- Balance has a positive and significant effect on default (p-value < 0.001). A unit increase in balance increases the log odds by 0.0057 after controlling for other factors.
+
+- Income does not have a statistically significant on default.
+
+- Being a student has a negative and significant effect on default (p-value < 0.001). Being student reduces the log odds by 0.6468 after controlling for other factors.
+
+Note: The effect of student on default is different from what we found from the mosaic plot. This is called confouding due to correlation among predictors.
+
+
+## 3.3. Calculate Pseudo R Squared
+
+We notice that logistic regression does not report R squared. We can calculate the McFadden pseudo R squared by sung the pscl package.
+
+```{r, message = FALSE}
+# McFadden R2
+# install.packages("pscl")
+library(pscl)
+pR2(logit.fit)
+```
+
+Or you can manually calculate the pseudo R squared by using the following formula:
+
+$R_{McFadden}^{2}=1-\frac{log(L_{m})}{log(L_{null})}$
+
+where $log(L_{m})$ is the log likelihood of the model of interest, $log(L_{null})$ is the likelihood of the null model, that has only intercept without any independent variables.
+
+```{r}
+# Fit the null model
+logit.null.fit <- glm(default ~1,family=binomial(link='logit'),data=Default)
+
+# Show the log likelihood of the null model
+logLik(logit.null.fit)
+```
+
+```{r}
+# Manually calculate McFadden pseudo R squared
+cat("McFadden pseudo R2 = ", 1-logLik(logit.fit)/logLik(logit.null.fit))
+```
+
+## 3.4. Use Logistic Regression Model to Predict
+
+### 3.4.1. In-Sample Prediction
+
+We can use the predict() function to calculate the predicted outcome. In the following code, the parameter type = "response" is specified to calculate the predicted possibility. By default, the prediction of a logit model is the log odds.
+
+```{r}
+# Calculate probability of default
+logit.probs <- predict(logit.fit,type="response")
+
+# Show the first 10 values
+logit.probs[1:10]
+```
+
+```{r}
+# Calculate predicted default
+logit.pred <- ifelse(logit.probs >.5, "Yes", "No")
+
+# Show confusion matrix
+table(Prediction=logit.pred, Truth=Default$default)
+```
+
+```{r}
+# Calculate in-sample prediction accuracy
+mean(logit.pred == Default$default)
+```
+
+Another way to report the prediction performance is to use the confusionMatrix function in caret package. This function provides other important measures such as kappa coefficient, sensitivity, and specificity.
+
+```{r}
+library(caret)
+library(e1071)
+confusionMatrix(factor(logit.pred),Default$default, positive = "Yes")
+
+```
+
+
+The in-sample prediction accuracy tends to overestimate the true accuracy. Let's calculate out-of-sample prediction performance. 
+
+We can call the sensitivity() and specificity() function in caret package to directly calculate sensitivity and specificity.
+
+```{r}
+sensitivity(factor(logit.pred),Default$default, positive = "Yes")
+```
+
+```{r}
+specificity(factor(logit.pred),Default$default, negative = "No")
+```
+
+### 3.4.2. Out-of-Sample Prediction
+
+To calculate out-of-sample prediction performance, we need to split the dataset into training set and testing set. Use the training data to fit the logistic regression model. Use the testing data to test the performance of the model.
+
+We use a single 70/30% split. We can use the sample() method supported by base R system to do the random sampling.
+
+```{r}
+# Data partition: randomly split the dataset into a train (70%) and a test set (30%)
+index <- 1:nrow(Default)
+set.seed(123)
+train_index <- sample(index, round(length(index)*0.7))
+train_set <- Default[train_index,]
+test_set <- Default[-train_index,]
+```
+
+
+```{r}
+# Train the logistic regression model
+logit.fit.train <- glm(default ~ balance + income + student, 
+                   family=binomial(link='logit'),data = train_set)
+
+summary(logit.fit.train)
+```
+
+Compare the full model and the model trained using the training dataset.
+
+```{r, warning=FALSE}
+stargazer(logit.fit, logit.fit.train, type = "text",star.cutoffs = c(0.05, 0.01, 0.001),
+          title="Logistic Regression", digits=4)
+```
+
+
+```{r}
+# Calculate probability of default
+test_probs <- predict(logit.fit.train, newdata = test_set, type="response")
+
+# Show the first 10 values
+test_probs[1:10]
+```
+
+```{r}
+# Calculate predicted default
+test_pred <- ifelse(test_probs >.5, "Yes", "No")
+
+# Show confusion matrix
+confusionMatrix(factor(test_pred),test_set$default)
+```
+Among all 2913 non-default customers, 2898 customers are correctly predicted as non-default by the model. However, the prediction of default customer is not that good: only 22 out of 87 default customers are correctly predicted by the algorithm.
+
+In the next, let's explore other algorithms including LDA and KNN.
+
+# 4. Linear Discriminant Analysis (LDA)
+
+Conduct a linear discriminant analysis on the whole set of Default data.
+
+```{r}
+library(MASS)
+lda.fit=lda(default ~ balance + income + student, data = Default)
+lda.fit
+```
+
+In this example, we got one linear discriminant (LD1).
+
+```{r}
+# Show coefficients of linear discriminants
+lda.fit$scaling
+```
+
+The following plot shows how the response is classified by the LDA classifier. The X-axis is the value of line defined by the coefficients of linear discriminants. 
+
+```{r}
+plot(lda.fit)
+```
+
+Calculate the in-sample prediction.
+
+```{r}
+lda.pred=predict(lda.fit)
+names(lda.pred)
+```
+
+The following figure shows how the data are classified. Class "Yes" and "No" are colored as red and green correspondingly. 
+
+The green points in class 2 ("Yes") and red points in class 1 ("No") represent the misclassified response.
+
+```{r}
+plot(lda.pred$x, lda.pred$class, 
+     col=c("green","red")[Default$default],
+     xlab = 'LD1', ylab = 'Predicted Class')
+```
+
+```{r}
+confusionMatrix(lda.pred$class,Default$default, positive = "Yes")
+```
+
+
+```{r}
+# Calculate in-sample prediction accuracy
+mean(lda.pred$class == Default$default)
+```
+
+```{r}
+sum(lda.pred$posterior[,2]>=.5)
+```
+
+```{r}
+sum(lda.pred$posterior[,2]<.5)
+```
+```{r}
+lda.pred$posterior[1:20,2]
+lda.pred$class[1:20]
+```
+
+If we use 0.2 as threshold, the number of default prediction can be calculated as:
+
+```{r}
+sum(lda.pred$posterior[,2]>.2)
+```
+
+Redo the prediction by using 0.2 as threshold.
+
+```{r}
+lda.pred2 <- ifelse(lda.pred$posterior[,2] > 0.2, "Yes", "No")
+table(lda.pred2)
+```
+
+```{r}
+confusionMatrix(factor(lda.pred2),Default$default, positive = "Yes")
+```
+
+Compared with the default threshold 0.5, using 0.2 as the threshold increases sensitivity but reduces specificity.
+
+In order to further increase sensitivity (or reduce the false negative rate), we may want to reduce the threshold to 0.1 or less.
+
+We can also visualize the LDA decision boundary as follows, ignoring if a customer is a student or not.
+
+```{r, echo = FALSE}
+# Source: http://michael.hahsler.net/SMU/EMIS7332/R/viz_classifier.html
+decisionplot <- function(model, data, class = NULL, predict_type = "class",
+  resolution = 100, showgrid = TRUE, ...) {
+
+  if(!is.null(class)) cl <- data[,class] else cl <- 1
+  data <- data[,1:2]
+  k <- length(unique(cl))
+
+  plot(data, col = as.integer(cl)+1L, pch = as.integer(cl)+1L, ...)
+
+  # make grid
+  r <- sapply(data, range, na.rm = TRUE)
+  xs <- seq(r[1,1], r[2,1], length.out = resolution)
+  ys <- seq(r[1,2], r[2,2], length.out = resolution)
+  g <- cbind(rep(xs, each=resolution), rep(ys, time = resolution))
+  colnames(g) <- colnames(r)
+  g <- as.data.frame(g)
+
+  ### guess how to get class labels from predict
+  ### (unfortunately not very consistent between models)
+  p <- predict(model, g, type = predict_type)
+  if(is.list(p)) p <- p$class
+  p <- as.factor(p)
+
+  if(showgrid) points(g, col = as.integer(p)+1L, pch = ".")
+
+  z <- matrix(as.integer(p), nrow = resolution, byrow = TRUE)
+  contour(xs, ys, z, add = TRUE, drawlabels = FALSE,
+    lwd = 2, levels = (1:(k-1))+.5)
+
+  invisible(z)
+}
+
+```
+
+```{r}
+x <- Default[c("balance", "income", "default")]
+
+lda.fit2=lda(default ~ balance + income, data = x)
+
+set.seed(3)
+decisionplot(lda.fit2, x[sample(nrow(x), 1000),], class = "default", 
+             main = "LDA Decision Boundary with 1000 Observations")
+
+```
+
+
+# 5. Quadratic Discriminant Analysis (QDA)
+
+## 5.1. Fit QDA on the Training Dataset
+
+```{r}
+qda.fit=qda(default ~ balance + income + student, data = train_set)
+qda.fit
+```
+
+We can also visualize the QDA decision boundary as follows, ignoring if a customer is a student or not. Compared to the LDA, the QDA has a non-linear decision boundary.
+
+```{r}
+x <- Default[c("balance", "income", "default")]
+
+qda.fit2=qda(default ~ balance + income, data = x)
+
+set.seed(3)
+decisionplot(qda.fit2, x[sample(nrow(x), 1000),], class = "default",
+             main = "QDA Decision Boundary with 1000 Observations")
+
+```
+
+
+## 5.2. Evaluate QDA on Test Dataset
+
+```{r}
+qda.pred=predict(qda.fit,test_set)
+
+confusionMatrix(qda.pred$class, test_set$default, positive = "Yes")
+```
+
+The following figure shows how the test data are classified by the QDA model. Class "Yes" and "No" are colored as red and green correspondingly. 
+
+The green points in class 2 ("Yes") and red points in class 1 ("No") represent the misclassified response in the test dataset.
+
+```{r}
+plot(qda.pred$posterior[,2], qda.pred$class, 
+     col=c("green","red")[test_set$default],
+     xlab = 'QDA Posterior', ylab = 'Predicted Class')
+```
+
+
+# 6. K-Nearest Neighbors
+
+## 6.1. Fit k-NN Models on the Training Dataset
+
+We use the knn() method in "class" package to fit the k-NN model.
+
+Because the k-NN algorithm needs to calculate distance between observations, all predictors need to be represented as numbers. Let's dummy code the student variable.
+
+```{r}
+train_set$student <- ifelse(train_set$student=='Yes', 1, 0)
+test_set$student <- ifelse(test_set$student=='Yes', 1, 0)
+```
+
+Then, fit the k-NN model to the training dataset.
+
+```{r}
+library(class)
+# Select the true values of the response in training set
+cl <- train_set[,"default"]
+# Use knn for k = 5, 20
+knn5 <- knn(train_set[,-1],test_set[,-1], cl, k = 5)
+knn20 <- knn(train_set[,-1],test_set[,-1], cl, k = 20)
+```
+
+
+## 6.2. Evaluate k-NN Models on Test Dataset
+
+```{r}
+# Confusion matrix and statistics, k = 5
+confusionMatrix(knn5,test_set$default, positive = "Yes")
+```
+
+```{r}
+# Confusion matrix and statistics, k = 20
+confusionMatrix(knn20,test_set$default, positive = "Yes")
+```
+
+Tune the hyperparameter k for KNN.
+
+```{r}
+accuracy <- NULL
+sensitivity <-NULL
+specificity <- NULL
+  
+for(i in 1:50) {
+  knn.fit <- knn(train_set[,-1],test_set[,-1], cl, k = i)
+  accuracy <- c(accuracy, mean(knn.fit == test_set$default))
+  sensitivity <- c(sensitivity, sensitivity(knn.fit,test_set$default, positive = "Yes"))
+  specificity <- c(specificity, specificity(knn.fit,test_set$default, negative = "No"))
+}
+
+balanced_accuracy = (sensitivity + specificity)/2
+```
+
+```{r, fig.height=7, fig.width=5}
+plot(1:50, accuracy, type = "l" ,col = "red", 
+     ylab = "Measures", xlab = "k",ylim = c(0.0, 1.0))
+
+lines(1:50, sensitivity, type = "l", col = "blue")
+
+lines(1:50, specificity, type = "l", col = "green")
+
+lines(1:50, balanced_accuracy, type = "l", col = "orange")
+
+legend("topright", legend = c("accuracy","sensitivity","specificity", "balanced accuracy"),
+       col = c("red","blue","green","orange"), lty = 1)
+```
+
+If balanced accuracy is used to evaluate the performance, k = 1 gives the best balanced accuracy (0.639).

@@ -1,0 +1,93 @@
+---
+title: "Homework 3"
+author: "Mark Chafin"
+date: "2/1/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+Question a
+How many rows are in this data set? How many columns? What do the rows and columns represent?
+They represent the Housing values in suburbs of Boston
+
+```{r}
+library(MASS)
+head(Boston)
+dim(Boston)
+```
+
+Quesiton b
+Make some pairwise scatterplots of the predictors (columns) in this data set. Describe your findings.
+
+This plot does not help much, though we can see there are some relationships within the data
+```{r}
+str(Boston)
+Boston$chas <- as.numeric(Boston$chas)
+Boston$rad <- as.numeric(Boston$rad)
+pairs(Boston)
+```
+
+Quesiton c
+Are any of the predictors associated with per capita crime rate? If so, explain the relationship.
+Yes, there positive relationships show a relationship with per capita crime
+```{r}
+Boston.corr = cor(Boston)
+Boston.corr.crim = Boston.corr[-1,1]
+print(
+  Boston.corr.crim[order(abs(Boston.corr.crim), decreasing = T)]
+)
+```
+
+Quesiton D
+Do any of the suburbs of Boston appear to have particularly high crime rates? Tax rates? Pupil-teacher ratios? Comment on the range of each predictor.
+Crime rate has a large spike, the Max is 85 larger than the average.
+Tax has a large jump in the 3rd quarter so there is a suburb that has much higher taxes than the others.
+Pupil-teacher ratios are fairly even, the max is 22 while the mean is 18.46 which shows there is not a large spread in data.
+```{r}
+summary(Boston$crim)
+summary(Boston$tax)
+summary(Boston$ptratio)
+```
+
+
+Question E
+How many of the suburbs in this data set bound the Charles river?
+There are 35 suburbs in this data set that bound the Charles river.
+```{r}
+summary(Boston$chas==1)
+```
+
+Question F
+What is the median pupil-teacher ratio among the towns in this data set?
+The median pupil-teacher ratio is 19 pupils per teacher
+```{r}
+summary(Boston$ptratio)
+```
+
+Question G
+Which suburb of Boston has lowest median value of owner- occupied homes? What are the values of the other predictors for that suburb, and how do those values compare to the overall ranges for those predictors? Comment on your findings.
+
+Suburb #399 with a median value of $5000
+Suburb #399's crime is very high compared to the average Boston rates. No residential land zoned for lots over 25,000 sq.ft. Proportion of non-retail business acres per town is high compared to most suburbs. This suburb does not bound the charles river. Nitrogen oxides concentration is very high. Average number of rooms per dwelling is on the lower side. It has the highest proportion of owner-occupied units built prior to 1940. Very low weighted mean of distances to five Boston employment centres. Highest index of accessibility to radial highways. One of the highest full-value property-tax rate per\$10,000. One of the highest pupil-teacher ratio by town. It has the highest value for 1000(Bk - 0.63)^2 where Bk is the proportion of blacks by town. One of the highest lower status of the population (percent). Lowest median value of owner-occupied homes in\$1000s. 
+From the data this suburb is not very deserible to live in.
+
+```{r}
+selection <- Boston[order(Boston$medv),]
+selection[1,]
+summary(Boston)
+```
+Question H
+In this data set, how many of the suburbs average more than seven rooms per dwelling? More than eight rooms per dwelling? Comment on the suburbs that average more than eight rooms per dwelling.
+
+There are 64 suburbs with more than 7 rooms per dwelling.
+There are 13 suburbs with more than 8 rooms per dwelling
+```{r}
+rm_over_7 <- subset(Boston, rm>7)
+nrow(rm_over_7)
+rm_over_8 <- subset(Boston, rm>8)
+nrow(rm_over_8)
+summary(rm_over_8)
+```
+

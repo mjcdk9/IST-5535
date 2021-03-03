@@ -1,0 +1,137 @@
+---
+title: "Homework 5"
+author: "Mark Chafin"
+date: "2/24/2021"
+output: 
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: '3'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls())
+```
+
+# 1
+
+There are 700 customers in the dataset that have good credit
+
+```{r}
+library(dplyr)
+credit_csv <- read.csv("credit-g.csv", stringsAsFactors = TRUE)
+credit_csv %>% filter(class == "good")
+
+```
+
+# 2
+People with existing credit and other existing credit have the highest "good" credit. Overall there are more people with good credit than with bad credit. People with no credit or who are all paid tend to have worse credit.
+```{r}
+library(ggplot2)
+ggplot(credit_csv, aes(y=credit_history, group=class, fill=class)) + geom_bar(color="Black", position=position_dodge()) + xlab("Credit History") + ylab("Number of Customers") + ggtitle("Distribution of Credit History Grouped by Class")
+```
+
+
+# 3
+According to this boxplot it appears the people with bad credit have a higher credit amount. And those with good credit have less credit, I am predicting they have better credit because the less credit it is easier to manage.
+```{r}
+ggplot(credit_csv, aes(y=credit_amount, group=class, fill=class )) + geom_boxplot(position=position_dodge())
+```
+
+# 4
+```{r}
+index <- 1:nrow(credit_csv)
+set.seed(123)
+train_index <- sample(index, round(length(index)*0.8))
+train_set <- credit_csv[train_index,]
+test_set <- credit_csv[-train_index,]
+```
+
+# 5
+```{r}
+logit.fit.train <- glm(class ~ checking_status + duration + purpose + credit_amount + savings_status + employment + installment_commitment + personal_status + other_parties + residence_since + property_magnitude + age + other_payment_plans + housing + existing_credits + job + num_dependents + own_telephone + foreign_worker, family = binomial(link = 'logit'), data = train_set)
+
+summary(logit.fit.train)
+```
+# A.
+The purpose variables all have fairly high positive effects on the probability. While the savings_status, residence_since, and housingrent, all have significant negative effect on the probability. Yes, the directions of the effects make sense and are consistent with my results from steps 2 and 3. The credit_amount has a negative estimate and in step 3 the higher the credit amount results in a higher chance of having bad credit.
+Significant variables: checking_status + duration + purpose + credit_amount + savings_status + employment + installment_commitment + personal_status + other_parties + other_payment_plans + num_dependents
+
+
+
+# B.
+The performance of the logistic regression on the test set is overall good. The existing credits has a positive effect on the probability and that is also reflected in #2. The accuracy is above 80% with the test data which is a decent model. The specificity is the best measure to evaluate how the model predicts bad credit.
+
+
+
+```{r}
+logit.fit.test <- glm(class ~ checking_status + duration + purpose + credit_amount + savings_status + employment + installment_commitment + personal_status + other_parties + residence_since + property_magnitude + age + other_payment_plans + housing + existing_credits + job + num_dependents + own_telephone + foreign_worker, family = binomial(link = 'logit'), data = test_set)
+
+summary(logit.fit.test)
+```
+
+
+
+
+```{r}
+# Calculate probability of default
+logit.probs <- predict(logit.fit.test,type="response")
+
+# Show the first 10 values
+logit.probs[1:10]
+```
+```{r}
+# Calculate predicted default
+logit.pred <- ifelse(logit.probs >.5, "good", "bad")
+logit.pred <-  factor(logit.pred)
+# Show confusion matrix
+table(Prediction=logit.pred, Truth=test_set$class)
+```
+
+```{r}
+library(caret)
+library(e1071)
+confusionMatrix(factor(logit.pred),test_set$class)
+```
+# 6
+This model does an okay job in classifying bad credit customers, the specificity is at 90% but the accuracy is only ~ 78%
+```{r}
+library(MASS)
+lda.fit <- lda(class ~ checking_status + duration + purpose + credit_amount + savings_status + employment + installment_commitment + personal_status + other_parties + other_payment_plans + num_dependents, data = train_set)
+```
+```{r}
+# Calculate probability of default
+lda.train.probs <- predict(lda.fit, type="response")
+lda.pred=predict(lda.fit)
+names(lda.pred)
+```
+
+
+```{r}
+library(caret)
+library(e1071)
+confusionMatrix(lda.pred$class,train_set$class)
+```
+
+
+# 7
+This model does not do a very good job at classifying bad credit customers. The specificity is ~81%, the sensitivity is ~72%, and the accuracy is ~79%.
+
+```{r}
+
+qda.fit <- qda(class ~ checking_status + duration + purpose + credit_amount + savings_status + employment + installment_commitment + personal_status + other_parties + other_payment_plans + num_dependents, data = train_set)
+```
+
+```{r}
+qda.pred=predict(qda.fit, train_set)
+confusionMatrix(qda.pred$class, train_set$class)
+```
+
+
+# 8
+I believe the logistic regression performed the best over the LDA and QDA. While the specificity was not the highest the accuracy and sensitivty were the highest.
+
+
+
+

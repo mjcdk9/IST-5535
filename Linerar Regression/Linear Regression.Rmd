@@ -1,0 +1,345 @@
+---
+title: "Linear Regression"
+author: "Langtao Chen"
+date: "Feb 11, 2020"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: '2'
+  pdf_document:
+    toc: yes
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+&nbsp;
+&nbsp;
+
+
+\newpage
+
+```{r, echo=FALSE}
+# Clean the environment
+rm(list = ls())
+```
+
+# 1. Data
+
+As example, we'll use the mtcars dataset to demonstrate how to conduct linear regression analysis. 
+
+```{r}
+# Show the structure of dataset
+str(mtcars)
+```
+
+This dataset contains 11 variables:
+
+- mpg: Miles/(US) gallon
+
+- cyl: Number of cylinders
+
+- disp: Displacement (cu.in.)
+
+- hp: Gross horsepower
+
+- drat: Rear axle ratio
+
+- wt: Weight (1000 lbs)
+
+- qsec: 1/4 mile time
+
+- vs: V/S
+
+-	am: Transmission (0 = automatic, 1 = manual)
+
+- gear: Number of forward gears
+
+- carb: Number of carburetors
+
+
+```{r}
+# Summary statistics
+summary(mtcars)
+```
+
+
+
+Draw a scatterplot matrix to show the relationships.
+
+```{r, fig.height= 5, fig.width= 6}
+pairs(~mpg+cyl+disp+hp+drat+wt+qsec, data = mtcars)
+```
+
+
+# 2. Simple Linear Regression
+
+## 2.1. Regress mpg on weight
+
+First, let's regress mpg on wt.
+
+```{r}
+# Regress mpg on wt
+LR1 <- lm(mpg ~ wt, data = mtcars)
+summary(LR1)
+```
+
+We can plot the relationship between MPG and weight, with the fitted linear regression line.
+
+```{r}
+library(ggplot2)
+ggplot(data = mtcars, aes(x=wt, y=mpg)) +
+  geom_point() + 
+  geom_smooth(method = 'lm', se = FALSE) +
+  labs(x='weight', y='mpg', title = 'Relationship between weight and mpg')
+```
+
+```{r}
+# another way
+ggplot(data = mtcars, aes(x=wt, y=mpg)) +
+  geom_point() + 
+  geom_abline(aes(intercept = LR1$coefficients[1], slope = LR1$coefficients[2]), col = 'blue') +
+  labs(x='weight', y='mpg', title = 'Relationship between weight and mpg')
+```
+
+From the above plot, it seems the linear model capture the linear relationship between weight and MPG well.
+
+Predict the mean mpg for a car with 4500 lb as weight.
+
+```{r}
+# mean prediction
+predict(LR1, newdata = data.frame(wt=4.5))
+```
+
+Let's further calculate the 95% prediction interval and confidence interval. The prediction interval reflects the uncerntaining around a specific value, while the confidence interval reflects the uncertainty around the true value of population mean. 
+
+```{r}
+# 95% prediction interval
+predict(LR1, newdata = data.frame(wt=4.5), interval="prediction")
+```
+
+Interpretation: 95% of the cars with a weight of 4500 lb have an mpg between 6.75 and 19.72.
+
+```{r}
+# 95% confidence interval
+predict(LR1, newdata = data.frame(wt=4.5), interval="confidence")
+```
+
+Interpretation: A car with a weight of 4500 lb has 95% opportunity that its true mean mpg ranges between 11.40 and 15.07.
+
+We notice 95% prediction interval is wider than 95% confidence interval. In practice, when we are interested in specific prediction values, 95% prediction interval is preferred. 
+
+## 2.2. Regeress mpg on displacement
+
+Then, let's regress mpg on disp.
+
+```{r}
+# Regress mpg on disp
+LR2 <- lm(mpg ~ disp, data = mtcars)
+summary(LR2)
+```
+
+The interpretation of coefficients is:
+
+- If disp increases by 1 cubic inches, mpg would on average decrease by 0.04 miles per gallon.
+
+Plot the regression line.
+
+```{r}
+ggplot(data = mtcars, aes(x=disp, y=mpg)) +
+  geom_point() + 
+  geom_smooth(method = 'lm', se = FALSE, col='red') +
+  labs(x='displacement', y='mpg', title = 'Relationship between displacement and mpg')
+```
+
+It seems that the relationship between disp and MPG is not linear. Let's add a quadratic term in the regression model, this makes a polynomial regression.
+
+
+```{r}
+# Regress mpg on disp and disp2
+LR3 <- lm(mpg ~ poly(disp,2), data = mtcars)
+summary(LR3)
+```
+
+We can see that by including the quadratic term of disp in the regression, the adjusted R square has been improved from 0.709 to 0.778. So polynomial regression is a better choice for modeling the relationship between disp and MPG.
+
+We can also visually compare the linear regression line and the polynomial regression line.
+
+```{r}
+ggplot(data = mtcars, aes(x=disp, y=mpg)) +
+  geom_point() + 
+  geom_smooth(method = 'lm', se = FALSE, col='red') +
+  geom_line(aes(x=mtcars$disp[order(mtcars$disp)], y=fitted(LR3)[order(mtcars$disp)]), col = "blue") +
+  labs(x='displacement', y='mpg', title = 'Relationship between displacement and mpg')
+```
+
+
+From the above plot, we can see that the polynomial regression line (blue) better fit the relationship than the linear regression line (red).
+
+We can formally test the difference between the simple linear regression and the polynomial regression. We can call the anova() method to conduct a hypothesis test comparing the two models. The null hypothesis here is that the two models fit the data equally well. The alternative hypothesis is that the polynomial model fits the data better.
+
+```{r}
+anova(LR2, LR3)
+```
+
+The F-statistic is 10.408 and the associated p-vale = 0.003 < 0.05. This provides evidence that the polynomial regression including both disp and disp2 is superior than the linear regression which only includes the disp term.
+
+
+# 3. Multiple Linear Regression Modeling
+
+## 3.1. Fit a multiple linear regression model
+
+First, let's regress mpg on wt, am, and hp.
+
+```{r}
+# Regress mpg on wt, am, and hp
+model1 <- lm(mpg ~ wt + factor(am) + hp, data = mtcars)
+summary(model1)
+```
+
+Notice that we use factor (or dummies) to represent categorical variable.
+
+Then, we can check if there is multicollinearity issue in the model.
+
+```{r}
+# Check multicolinearity
+# install.packages("car")
+library(car)
+vif(model1)
+```
+
+A general rule is that an explanatory variable with vif > 5 has multicollinearity issue. So, there is no multicollinearity issue in model 1.
+
+Let's add one more variable qsec into the regression model.
+
+```{r}
+model2 <- lm(mpg ~ wt + factor(am) + hp + qsec, data = mtcars)
+summary(model2)
+```
+
+```{r}
+# Check multicolinearity
+vif(model2)
+```
+
+Now the variable hp has a large VIF value, which indicates possible multicollinearity issue. Let's show the correlation matrix and manually check the multicollinearity issue.
+
+```{r}
+cor(mtcars[c("wt","am","hp","qsec")])
+```
+
+From the correlation matrix, we know that hp has a strong correlation with qsec. This makes sense since a car with more horsepower tends to have shorter time required for speed acceleration. Thus, adding qsec in model 2 raises the collinearity problem for hp.
+
+It seems the variable hp should be removed from the model to avoid the multicollinearity issue. Let's try another model without hp.
+
+```{r}
+model3 <- lm(mpg ~ wt + factor(am) + qsec, data = mtcars)
+summary(model3)
+```
+
+```{r}
+vif(model3)
+```
+
+It's clear that model 3 does not have multicollinearity issue.
+
+\newpage
+
+## 3.2. Model Selection
+
+As we have multiple regression models, let's use stargazer package to report regression results of all models.
+
+```{r, message = FALSE, warning=FALSE}
+# install.packages("stargazer") #Install stargazer package, do this only once
+library(stargazer)
+stargazer(model1, model2, model3, type = "text", star.cutoffs = c(0.05, 0.01, 0.001),
+          title="Multiple Linear Regression", digits=4)
+
+```
+
+Based on the above comparison, we can select appropriate model for different purposes.
+
+For explanation purpose, we probably choose model 3. Because:
+
+- (1) Compared with model 2, model 3 has no collinearity issue (model 3 > model 2)
+
+
+- (2) Compared with model 1, model 3 has a higher coefficient of determination, i.e, adjusted $R^2$ (model 3 > model 1)
+
+
+For prediction purpose, we can keep on model 2 since it has the highest adjusted $R^2$.
+
+\newpage
+
+## 3.3. Stepwise Variable Selection
+
+Inm practice, when we have many candidate predictors (independent variables), we use the stepAIC() method in MASS package to do the variable selection. The stepAIC() method performs stepwise model selection by AIC (Akaike information criterion, a measure used to evaluate the relative quality of statistical models).
+
+```{r}
+# First load the MASS package
+library(MASS)
+```
+
+Let's use a full model in which the mpg is regressed on all other variables. Then use the stepwise variable selection approach to reduce the number of predictors in the regression model.
+
+```{r, message=FALSE, results='hide'}
+# Regress mpg on all other variables
+fit <- lm(mpg ~ ., data = mtcars)
+
+# Perform stepwise model selection
+step <- stepAIC(fit, direction="both")
+```
+
+```{r}
+# Show results
+step$anova
+```
+
+
+According to the stepwise variable selection approach, the recommended model is mpg ~ wt + qsec + am.
+
+Then, we use the model selected by the stepwise selection procedure as the final model.
+
+```{r}
+# Fit a linear regression model
+fit_final <- lm(mpg ~ wt + qsec + am, data = mtcars)
+
+# Show results
+summary(fit_final)
+
+```
+
+From the above results, we find that the final regression model improves model fit as it has a relatively larger adjusted R squared. Through the stepwise model selection process, the insignificant variables have beem eliminated.
+
+
+\newpage
+
+## 3.4. Interpreting Multiple Linear Regression
+
+Let's choose final model as selected by the stepwise variable selection approach and interpret its result.
+
+```{r, warning=FALSE}
+stargazer(fit_final, type = "text", star.cutoffs = c(0.05, 0.01, 0.001),
+          title="Multiple Linear Regression", digits=4)
+```
+
+The interpretation of coefficients is:
+
+- If weight increases by 1000 pounds, mpg would on average decrease by 3.92 miles per gallon after controlling for other factors.
+
+- Having a manual transmission (am = 1) would on average increase mpg by 2.94 miles per gallon after controlling for other factors.
+
+- Increasing qsec by 1 second (i.e., reducing the speed acceleration performance) would would on average increase mpg by 1.23 miles per gallon after controlling for other factors.
+
+## 3.5. Hypothesis Test
+
+The lm() method in R will report hypothesis tests regarding $\beta_i=0$. Sometimes, we may have complicated relations to test. For example, in the above final regression model, we are interested in checking if the coeffects of am and qsec are the same: $\beta_{am}=\beta_{qsec}$. We can do this kind of hypothesis test by using the linearHypothesis() method in car package.
+
+```{r}
+library(car)
+
+linearHypothesis(fit_final, c("am = qsec"))
+```

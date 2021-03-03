@@ -1,0 +1,125 @@
+---
+title: "Homework 4"
+author: "Mark Chafin"
+date: "2/21/2021"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: '3'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## A
+(a) Using the rnorm() function, create a vector, x, containing 100 observations drawn from a N(0,1) distribution. This represents a feature, X.
+```{r}
+set.seed(1)
+x <- rnorm(100)
+```
+
+## B
+(b) Using the rnorm() function, create a vector, eps, containing 100 observations drawn from a N(0,0.25) distribution i.e. a normal distribution with mean zero and variance 0.25.
+```{r}
+eps <- rnorm(100, sd = sqrt(0.25))
+```
+
+## C
+(c) Using x and eps, generate a vector y according to the model
+Y =−1+0.5X+ε. (3.39)
+What is the length of the vector y? What are the values of β0 and β1 in this linear model?
+```{r}
+y <- -1 + 0.5 * x + eps
+length(y)
+```
+The values of β0 and β1 are -1 and 0.5
+
+## D
+(d) Create a scatterplot displaying the relationship between x and y. Comment on what you observe.
+```{r}
+plot(x,y)
+```
+
+
+The relationship between x and y is linear with some "noise" from the "eps" variable.
+
+## E
+(e) Fit a least squares linear model to predict y using x. Comment on the model obtained. How do βˆ0 and βˆ1 compare to β0 and β1?
+
+```{r}
+fit01 <- lm(y ~ x)
+summary(fit01)
+```
+
+The values of βˆ0 and βˆ1 are close to β0 and β. The model has a large F statistic with a near-zero p-value so the null hypothesis can be rejected.
+
+## F
+(f) Display the least squares line on the scatterplot obtained in (d). Draw the population regression line on the plot, in a different color. Use the legend() command to create an appropriate legend.
+```{r}
+plot(x,y)
+abline(fit01, col = "green")
+abline(-1, 0.5, col = "blue")
+legend("topleft", c("Least square", "Regression"), col = c("green", "blue"), lty = c(1,1))
+```
+## G
+(g) Now fit a polynomial regression model that predicts y using x and x2. Is there evidence that the quadratic term improves the model fit? Explain your answer.
+```{r}
+fit02 <- lm(y ~ x + I(x^2))
+summary(fit02)
+```
+
+The coefficient for x^2 is insignificant since its p-value is higher than 0.05.  There is no significant evidence that the quadratic improves the model fit.
+
+## H
+(h) Repeat (a)–(f) after modifying the data generation process in such a way that there is less noise in the data. The model (3.39) should remain the same. You can do this by decreasing the variance of the normal distribution used to generate the error term ε in (b). Describe your results.
+```{r}
+set.seed(1)
+eps <- rnorm(100, sd = 0.125)
+x <- rnorm(100)
+y <- -1 + 0.5 * x + eps
+plot(x, y)
+fit03 <- lm(y ~ x)
+summary(fit03)
+```
+
+```{r}
+plot(x,y)
+abline(fit03, col = "green")
+abline(-1, 0.5, col = "blue")
+legend("topleft",c("Least square", "Regression"), col = c("green", "blue"), lty = c(1, 1))
+```
+
+I reduced the noise by decreasing the variance of the sd used to create the error term ε. The coefficients are very close to the original ones. Since the relationship is more linear, there is a higher R^2 and lower RSE. 
+
+## I
+(i) Repeat (a)–(f) after modifying the data generation process in such a way that there is more noise in the data. The model (3.39) should remain the same. You can do this by increasing the variance of the normal distribution used to generate the error term ε in (b). Describe your results.
+
+```{r}
+set.seed(1)
+eps <- rnorm(100, sd = 0.5)
+x <- rnorm(100)
+y <- -1 + 0.5 * x + eps
+fit04 <- lm(y ~ x)
+summary(fit04)
+plot(x, y)
+abline(fit04, col = "green")
+abline(-1, 0.5, col = "blue")
+legend("topleft",c("Least square", "Regression"), col = c("green", "blue"), lty = c(1, 1))
+```
+
+I increased the noise by increasing the variance of the sd used to create the error term ε. The coefficients are very close to the original ones. Now since the relationship is not as linear, there is a lower R^2 and higher RSE. Since we have a large data set the lines are farther apart but still relatively close together.
+
+## J
+(j) What are the confidence intervals for β0 and β1 based on the original data set, the noisier data set, and the less noisy data set? Comment on your results.
+```{r}
+confint(fit01)
+```
+```{r}
+confint(fit03)
+```
+```{r}
+confint(fit04)
+```
+
+All confidence intervals are centered on 0.5. As the noise decreases, the confidence intervals become more accurate and there is a higher predictability. As the noise increases the confidence interval becomes larger and is less accurate.
