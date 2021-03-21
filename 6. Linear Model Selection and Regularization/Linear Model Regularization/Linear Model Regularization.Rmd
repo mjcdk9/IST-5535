@@ -1,0 +1,279 @@
+---
+title: "Linear Model Regularization (Ridge Regression and the Lasso)"
+author: "Langtao Chen"
+date: 'Initial: Jan 24, 2019 <br> Update: Mar 13, 2021'
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: 3
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: '3'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+&nbsp;
+&nbsp;
+
+
+\newpage
+
+Refer to the book chapter 6.6 for the example of ridge regression and the lasso demonstrated below.
+
+```{r, echo=FALSE}
+# Clean the environment
+rm(list = ls())
+```
+
+# 1. Data
+
+As an example, we use the Major League Baseball Data (from the 1986 and 1987 seasons) to demonstrate how to conduct ridge regression and the lasso. The response variable is the salary of major league baseball players.
+
+```{r}
+library(ISLR)
+data(Hitters)
+str(Hitters)
+```
+
+```{r}
+summary(Hitters)
+```
+
+We can see that the Salary column contains 59 missing values. Let's remove rows with missing values.
+
+```{r}
+# Remove missing values
+Hitters <- na.omit(Hitters)
+```
+
+
+```{r}
+hist(Hitters$Salary,
+     main = 'Histogram of Salary',
+     xlab = 'Salary')
+```
+
+# 2. Data Preparation
+
+## 2.1. Create Input Matrix
+
+We will use the glmnet package for linear model regularization. The glmnet package fits lasso and elastic-net model paths for regression, logistic and multinomial regression using coordinate descent. The algorithm is extremely fast, and exploits sparsity in the input x matrix where it exists.
+
+The glmnet() function needs an x matrix as input and y as a vector. We can use the model.matrix() method to create the input matrix. The model.matrix() method can automatically transform qualitative variables into dummy variables.
+
+```{r}
+# Create input matrix, removing the intercept
+x <- model.matrix(Salary ~ ., data = Hitters)[,-1]
+colnames(x)
+```
+
+```{r}
+y <- Hitters$Salary
+```
+
+
+## 2.2. Data Split
+
+Let's split the whole dataset into training (50%) and test (50%) sets.
+
+```{r}
+set.seed(1)
+
+train <- sample(1:nrow(x),nrow(x)*0.50)
+
+x_train <- x[train, ]
+x_test <- x[-train, ]
+
+dim(x_train)
+```
+```{r}
+dim(x_test)
+```
+
+```{r}
+y_train <- y[train]
+y_test <- y[-train]
+```
+
+
+# 3. Ridge Regression
+
+## 3.1. Fit Ridge Regression on Training Data
+
+The glmnet() function has an alpha argument that determines what type of model is fit. Set alpha = 0 if a ridge regression model is required. Set alpha = 1 if a lasso model is needed.
+
+```{r}
+library(glmnet)
+
+# Set the range of lambda as from 10^10 to 10^-2.
+grid <- 10^seq(10, -2, length=100)
+
+ridge_mod <- glmnet(x = x_train, y=y_train, alpha = 0, lambda = grid)
+
+dim(coef(ridge_mod))
+```
+
+```{r}
+# Plot the coefficients
+plot(ridge_mod, xvar = 'lambda')
+```
+
+From the above plot, we can see coefficients can be very close to zero when a large $\lambda$ is chosen.
+
+The ridge regression minimizes $$RSS + \lambda \sum_{j=1}^{p}\beta_j^2$$. For example, below are the L2 norm when $\lambda=11497.57$ and $\lambda=42.288$.
+
+```{r}
+# lamda = 11497.57
+ridge_mod$lambda[50]
+```
+
+```{r}
+# Coefficients when lambda = 11497.57
+coef(ridge_mod)[,50]
+```
+
+```{r}
+# l2 norm when lambda = 11497.57
+sqrt(sum(coef(ridge_mod)[-1,50]^2))
+```
+
+
+```{r}
+# lamda = 43.288
+ridge_mod$lambda[70]
+```
+
+```{r}
+# Coefficients when lambda = 43.288
+coef(ridge_mod)[,70]
+```
+
+```{r}
+# L2 norm when lambda = 43.288
+sqrt(sum(coef(ridge_mod)[-1,70]^2))
+```
+
+```{r}
+# Calculate all L2
+L2 <- NULL
+
+for(i in 1:100){
+  L2 <- c(L2, sqrt(sum(coef(ridge_mod)[-1,i]^2)))
+}
+
+# Plot the relationship between lambda and L2 norm
+plot(x = ridge_mod$lambda, y = L2,
+     log = 'x', type = 'l', col = 'red',
+     xlab = 'Lambda', ylab = 'L2 Norm')
+```
+
+We can see from the above plot that generally when a large $\lambda$ is used, the coefficient estimates to be much smaller, in terms of L2 norm $$\sum_{j=1}^{p}\beta_j^2$$. 
+
+## 3.2. Test Ridge Regression on Test Data
+
+Now we test the performance of ridge regression on the test set, arbitrarily choosing $\lambda=4$.
+
+```{r}
+pred_ridge <- predict(ridge_mod, s = 4, newx = x_test)
+
+library(caret)
+postResample(pred = pred_ridge, obs = y_test)
+```
+
+Calculate the performance of OLS, which is simply ridge regression with $\lambda=0$.
+
+```{r}
+pred_ridge_ols <- predict(ridge_mod, s = 0, newx = x_test, 
+                          exact = TRUE, x = x_train, y = y_train)
+
+postResample(pred = pred_ridge_ols, obs = y_test)
+```
+
+We can find that ridge regression has lower RMSE and MAE and higher $R^2$ than OLS.
+
+## 3.3. Use K-Fold Cross-Validation to Tune Pamarameter Lambda
+
+In general, it's better to use cross-validation to choose the tuning parameter $\lambda$. We can use the built-in cross-validation function cv.glmnet() to fine tune the lambda .
+
+```{r}
+set.seed(1)
+cv_out <- cv.glmnet(x_train, y_train, alpha = 0, lambda = grid, nfolds = 5)
+plot(cv_out)
+```
+
+```{r}
+best_lambda <- cv_out$lambda.min
+best_lambda
+```
+
+```{r}
+pred_ridge2 <- predict(ridge_mod, s = best_lambda, newx = x_test)
+
+postResample(pred = pred_ridge2, obs = y_test)
+```
+
+Compared with the ridge regression with an arbitrary $\lambda=4$, the best parameter $\lambda$ tuned by the 5-fold cross-validation can further improve the performance of the ridge regression on the test dataset.
+
+Finally, we refit the ridge regression model on the full dataset, using the best value of $\lambda$ and examine the coefficient
+estimates.
+
+```{r}
+ridge_full <- glmnet(x, y, alpha = 0)
+predict(ridge_full, type="coefficients", s= best_lambda)[1:20,]
+```
+
+None of the coefficients are zero. That is to say, ridge regression does not perform variable selection!
+
+# 4. The Lasso
+
+## 4.1. Fit Lasso Model on Training Data
+To fit a lasso model, we can simply set the alpha parameter as 1.
+
+```{r}
+# Fit a lasso model on the training dataset
+lasso_mod <- glmnet(x = x_train, y = y_train, alpha = 1, lambda = grid)
+
+# Plot the coefficients
+plot(lasso_mod, xvar = 'lambda')
+```
+
+From the above plot, we can see some coefficients can be exactly equal to zero.
+
+## 4.2. Use K-Fold Cross-Validation to Tune Parameter Lambda
+
+Like what we did in section 3.2, we can use cross-validation to choose the tuning parameter $\lambda$.
+
+```{r}
+set.seed(1)
+cv_out2 <- cv.glmnet(x_train, y_train, alpha = 1, lambda = grid, nfolds = 5)
+plot(cv_out2)
+```
+
+
+```{r}
+# Get the best lambda tuned by cross-validation
+best_lambda2 <- cv_out2$lambda.min
+best_lambda2
+```
+
+```{r}
+pred_lasso <- predict(lasso_mod, s = best_lambda2, newx = x_test)
+
+postResample(pred = pred_lasso, obs = y_test)
+```
+
+The above lasso has a similar performance as the ridge regression with the best lambda paramter.
+
+Finally, we refit the lasso model on the full dataset, using the best value of $\lambda$ and examine the coefficient
+estimates.
+
+```{r}
+lasso_full <- glmnet(x, y, alpha = 1)
+predict(lasso_full, type="coefficients", s= best_lambda2)[1:20,]
+```
+
+An advantage of the lasso over ridge regression is that the lasso can do variable selection. From the above result, we can see that 12 of the 19 coefficients are exactly zero. So the lasso model with the best $\lambda$ tuned by cross-validation only contains seven variables.

@@ -1,0 +1,215 @@
+---
+title: "Homework 6"
+author: "Mark Chafin"
+date: "3/16/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls())
+library(dplyr)
+library(caret)
+```
+# 1 
+  Import the data, show the structure of the dataset. Explain what variables in the dataset that 
+are currently represented as quantitative variables but should be measured by nominal scale.
+Do not include those dummy variables.
+
+```{r}
+df <- read.csv("UniversalBank.csv", stringsAsFactors = TRUE)
+str(df)
+
+```
+
+# 2
+  Convert the data type of Education variable to dummies. Also remove the customer ID and 
+zip code from the dataset.
+```{r}
+df$Education <- factor(df$Education, levels = c(1, 2, 3),
+                       labels = c("Undergrad", "Graduate", "Advanced/Professional"))
+df$Personal_Loan <- factor(df$Personal_Loan)
+df <- select(df, -c(Id, ZIP_Code))
+glimpse(df)
+```
+
+# 3
+  Use logistic regression, LDA, and QDA to predict whether a customer accepts personal loan offered in the last campaign by Universal Bank. 
+  Use other variables remained in the dataset as predictors. 
+  Fit the machine learning models to the whole dataset (do not manually split the dataset into training and test sets) by using a 5-fold cross validation to calculate the performance measures including balanced accuracy, sensitivity, and specificity.
+
+```{r}
+fitControl <- trainControl(method = "cv", number = 5)
+
+set.seed(100)
+
+
+
+logit_fit <- train(factor(Personal_Loan) ~ ., data = df,trControl = fitControl, family = binomial(link = "logit"))
+                   
+                   
+
+
+print(logit_fit)
+
+confusionMatrix(logit_fit)
+
+```
+
+
+```{r}
+k.folds <- function(k) {
+  folds <- createFolds(df$Personal_Loan, k = k, list = TRUE, returnTrain = TRUE)
+  accuracies <- c()
+  
+  for (i in 1:k) {
+    model <- glm(Personal_Loan ~ ., data = df[folds[[i]],], family = binomial(link = 'logit'))
+    
+    pred_prob_cv <- predict(object = model, newdata = df[-folds[[i]],], type = "response")
+    pred_class_cv <- ifelse(pred_prob_cv > 0.5, 1, 0)
+    
+    
+    accuracies <- c(accuracies,
+                    confusionMatrix(factor(pred_class_cv),
+                                    df[-folds[[i]], ]$Personal_Loan, positive = "1")$byClass['Balanced Accuracy'])
+  }
+  accuracies
+}
+
+set.seed(100)
+accuracies_cv <- k.folds(5)
+accuracies_cv
+```
+
+
+# logit // balanced accuracy
+```{r}
+# Calculate the average balanced accuracy
+cat('Balanced Accuracy:\n Mean = ', mean(accuracies_cv),"; ",
+    'Standard Deviation = ',sd(accuracies_cv), ";\n",
+    '95% Confidence Interval = [',
+    mean(accuracies_cv) - sd(accuracies_cv) * 1.96, ", ",
+    mean(accuracies_cv) + sd(accuracies_cv) * 1.96,"]")
+```
+# logit // sens // spec //accuracy
+```{r}
+## Train a logistic regression model with repeated 5-fold cross-validation
+fitControl_rcv <- trainControl(method = "repeatedcv",
+                               number = 5, 
+                               repeats = 200,
+                               classProbs = TRUE,
+                               summaryFunction = twoClassSummary)
+
+set.seed(100)
+logit_fit_rcv <- train(factor(ifelse(Personal_Loan==1, 'Yes', 'No'), levels = c('Yes','No')) ~ ., 
+                       data = df,
+                       trControl = fitControl_rcv,
+                       method="glm", family=binomial(link='logit'),
+                       metric = "ROC")
+
+print(logit_fit_rcv)
+
+confusionMatrix(logit_fit_rcv)
+```
+
+
+# Train LDA //sensitivity // specificity // accuracy
+```{r}
+set.seed(100)
+LDA_fit <- train(Personal_Loan ~ ., data = df,
+                       trControl = fitControl, method = "lda",
+                       verbose=FALSE)
+
+print(LDA_fit)
+
+# In-sample performance
+ confusionMatrix(LDA_fit)
+
+set.seed(100)
+LDA_fit_rcv <- train(factor(ifelse(Personal_Loan==1, 'Yes', 'No'), levels = c('Yes','No')) ~ ., 
+                       data = df,
+                       trControl = fitControl_rcv,
+                       method="lda", family=binomial(link='logit'),
+                       metric = "ROC")
+
+  print(LDA_fit_rcv)
+
+confusionMatrix(LDA_fit_rcv)
+
+```
+
+# trying to get LDA balanced accuracy
+```{r}
+
+k.folds <- function(k) {
+  folds <- createFolds(df$Personal_Loan, k = k, list = TRUE, returnTrain = TRUE)
+  accuracies <- c()
+  
+  for (i in 1:k) {
+    model <- glm(Personal_Loan ~ ., data = df[folds[[i]],], family = binomial(link = 'gmb'))
+    
+    pred_prob_cv <- predict(object = model, newdata = df[-folds[[i]],], type = "response")
+    pred_class_cv <- ifelse(pred_prob_cv > 0.5, 1, 0)
+    
+    
+    accuracies <- c(accuracies,
+                    confusionMatrix(factor(pred_class_cv),
+                                    df[-folds[[i]], ]$Personal_Loan, positive = "1")$byClass['Balanced Accuracy'])
+  }
+  accuracies
+}
+
+set.seed(100)
+accuracies_cv <- k.folds(5)
+accuracies_cv
+# Calculate the average balanced accuracy
+cat('Balanced Accuracy:\n Mean = ', mean(accuracies_cv),"; ",\
+    'Standard Deviation = ',sd(accuracies_cv), ";\n",
+    '95% Confidence Interval = [',
+    mean(accuracies_cv) - sd(accuracies_cv) * 1.96, ", ",
+    mean(accuracies_cv) + sd(accuracies_cv) * 1.96,"]")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Train QDA
+```{r}
+set.seed(123)
+QDA_fit <- train(Personal_Loan ~ ., data = df,
+                       trControl = fitControl, method = "qda",
+                       verbose=FALSE)
+
+print(QDA_fit)
+
+# In-sample performance
+confusionMatrix(QDA_fit)
+```
+
+
+
+
+
+
+
+
+
+
+

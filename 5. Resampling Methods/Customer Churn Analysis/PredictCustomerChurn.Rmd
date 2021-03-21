@@ -1,0 +1,261 @@
+---
+title: "Predict Customer Churn"
+author: "Langtao Chen"
+date: "Mar 2, 2021"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: 3
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: '3'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+&nbsp;
+&nbsp;
+
+
+\newpage
+
+In this example, we'll use the caret R package to conduct predictive modeling of a customer churn dataset.
+
+# 1. Read in Dataset
+```{r}
+# Clean the environment
+rm(list = ls())
+
+# Read data file
+df <- read.csv("Telco-Customer-Churn.csv", stringsAsFactors = TRUE)
+```
+
+# 2. Explore Data
+
+```{r}
+# Show the head of the dataset
+head(df)
+```
+
+```{r}
+# Show the structure of the dataset
+str(df)
+```
+
+```{r}
+# Summary statistics
+summary(df)
+```
+
+From the summary statistics, we found that there are missing values. We decided to remove missing values from the dataset.
+
+```{r}
+# Remove NAs
+df <- na.omit(df)
+```
+
+# 3. Predictive Modeling
+
+## 3.1 Data Partition
+
+Let's split the whole dataset into 80% training data and 20% test data.
+
+```{r}
+# Load library
+library(caret)
+
+# Data partition
+set.seed(1234)
+trainIndex <- createDataPartition(df$Churn, p = .8, list = FALSE)
+train_data <- df[ trainIndex,]
+test_data  <- df[-trainIndex,]
+
+cat('Number of observations in training set:', nrow(train_data),'\n',
+    'Number of observations in test set:', nrow(test_data))
+```
+
+In this section, we explore three different methods to predict customer churn 
+
+- Logistic Regression
+- Naive Bayes Classifer (NB)
+- Support Vector Machine (SVM)
+- Gradient Boosted Machine (GBM)
+
+
+## 3.2 Train Logistic Regression
+
+We can use the train() method in caret package to easily train a regression (prediction) or classification model. Refer to the following link for all available models supported by the train() method.
+
+http://topepo.github.io/caret/available-models.html
+
+We can call getModelInfo() method to get model information.
+
+```{r}
+# Get information of the "glm"" model
+# getModelInfo("glm")
+```
+
+
+```{r}
+## Train a logistic regression model with 10-fold cross-validation
+fitControl <- trainControl(method = "cv",number = 10)
+
+set.seed(123)
+logit_fit <- train(Churn ~ ., data = train_data[-1],
+                   trControl = fitControl,
+                   method="glm", family=binomial(link='logit'))
+
+print(logit_fit)
+
+# In-sample performance
+confusionMatrix(logit_fit)
+```
+
+Please note that in the train() function call, we need to exclude customer ID as a predictor. Since customer ID is the first column in the dataset, we use "data = train_data[-1]" as a parameter of the train() function call to exclude customer ID. The same approach is applied to other models.
+
+Notice the above confusion matrix shows the result on the training dataset (in-sample performance). To more accurately measure the true performance of the algorithm, we need to evaluate on the test dataset (out-of-sample performance).
+
+```{r}
+# Out-of-sample performance
+confusionMatrix(predict(logit_fit, newdata = test_data),
+                test_data$Churn, positive = 'Yes')
+```
+
+
+
+## 3.3 Train Support Vector Machine
+
+```{r}
+## Train Support Vector Machine (Radial Basis Function Kernel) with 10-fold Cross-Validation
+set.seed(123)
+svmRadial_fit <- train(Churn ~ ., data = train_data[-1],
+                       trControl = fitControl, method = "svmRadial",
+                       verbose=FALSE)
+
+print(svmRadial_fit)
+
+# In-sample performance
+confusionMatrix(svmRadial_fit)
+```
+
+```{r}
+# Plot resampling profile by accuracy
+plot(svmRadial_fit)
+```
+```{r}
+# Plot resampling profile by kappa statistic
+plot(svmRadial_fit, metric = "Kappa")
+```
+
+```{r}
+# Out-of-sample performance
+confusionMatrix(predict(svmRadial_fit, newdata = test_data),
+                test_data$Churn, positive = 'Yes')
+```
+
+## 3.4 Train Gradient Boosted Machine (GBM)
+
+```{r}
+# Train GBM with 10-fold Cross-Validation
+set.seed(123)
+gbm_fit <- train(Churn ~ ., data = train_data[-1],
+                 trControl = fitControl, method = "gbm",
+                 verbose=FALSE)
+
+print(gbm_fit)
+
+confusionMatrix(gbm_fit)
+```
+
+```{r}
+# Plot resampling profile by accuracry
+plot(gbm_fit)
+```
+
+```{r}
+# Plot resampling profile by kappa statistic
+plot(gbm_fit, metric = "Kappa")
+```
+
+
+```{r}
+# Out-of-sample performance
+confusionMatrix(predict(gbm_fit, newdata = test_data),
+                test_data$Churn, positive = 'Yes')
+```
+
+## 3.5 Compare Different Predictive Models
+
+### 3.5.1 Compare Models on Training Dataset
+
+```{r}
+# Collect resamples
+resamps <- resamples(list(Logit=logit_fit, SVM=svmRadial_fit, GBM = gbm_fit))
+
+# Summarize the resamples
+summary(resamps)
+```
+
+```{r}
+# Boxplots of resamples
+bwplot(resamps)
+```
+
+```{r}
+# Dot plots of resamples
+dotplot(resamps)
+```
+
+Comparing the three models, we found that GBM is the best model in terms of accuracy, while logistic regression is the best one in terms of kappa coefficient.
+
+We can compute the differences between models, then use a simple t-test to evaluate the null hypothesis that there is no difference between models.
+
+```{r}
+difValues <- diff(resamps)
+
+summary(difValues)
+```
+
+From the above hypothesis test, we can conclude that:
+
+- In terms of accuracy, all the three models have no significant difference, because the p-value > 0.05 for each pair of two models.
+- In terms of kappa coefficient, logistic regression has a better performance than SVM ( logit - SVM = 0.023 > 0, p-value = 0.02 < 0.05), and GBM does not have a better performance than SVM (SVM - GBM = -0.014 < 0, p-value = 0.60 > 0.05). The difference between logistic regression and GBM is not statistically significant (logit - GBM = 0.009, p-value = 1.00 > 0.05).
+
+We can also plot the difference between models.
+
+```{r}
+bwplot(difValues, layout = c(3, 1))
+```
+
+```{r}
+dotplot(difValues)
+```
+
+### 3.5.2 Compare Models on Test Dataset
+
+Let's use a table to summarize the performance of all three models in the test dataset.
+
+```{r, warning=FALSE}
+accu <- c(confusionMatrix(predict(logit_fit, newdata=test_data),test_data$Churn)$overall['Accuracy'],
+          confusionMatrix(predict(svmRadial_fit, newdata=test_data),test_data$Churn)$overall['Accuracy'],
+          confusionMatrix(predict(gbm_fit, newdata=test_data),test_data$Churn)$overall['Accuracy'])
+
+sensi <- c(confusionMatrix(predict(logit_fit, newdata=test_data),test_data$Churn,positive='Yes')$byClass['Sensitivity'],
+           confusionMatrix(predict(svmRadial_fit, newdata=test_data),test_data$Churn,positive='Yes')$byClass['Sensitivity'],
+           confusionMatrix(predict(gbm_fit, newdata=test_data),test_data$Churn,positive='Yes')$byClass['Sensitivity'])
+
+speci <- c(confusionMatrix(predict(logit_fit, newdata=test_data),test_data$Churn,positive='Yes')$byClass['Specificity'],
+           confusionMatrix(predict(svmRadial_fit, newdata=test_data),test_data$Churn,positive='Yes')$byClass['Specificity'],
+           confusionMatrix(predict(gbm_fit, newdata=test_data),test_data$Churn,positive='Yes')$byClass['Specificity'])
+
+data.frame(Accuracy = round(accu,3), 
+           Sensitivity = round(sensi,3), 
+           Specificity = round(speci,3),
+           Balanced.Accuracy = round((sensi + speci)/2,3), 
+           row.names = c('Logit','SVM','GBM'))
+```
+
+Since this is an imbalanced dataset, let's use balanced accuracy as the performance metric. Then the logistic regression is the best model among all of the three.

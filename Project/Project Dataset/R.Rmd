@@ -1,0 +1,34 @@
+---
+title: "Skyrim Steam Reviews"
+author: 'Group 2:  Joseph Bextermueller, Mark Chafin, David Ruitt, and Lauren Shaffer
+  IST 5535'
+date: "3/16/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+  rm(list = ls())
+```
+
+## 1. Read dataset
+```{r}
+  #install.packages("jsonlite") Will need this
+  library(jsonlite)
+  The_Elder_Scrolls_JSON <- "The_Elder_Scrolls_V.jsonlines"
+  
+  df <- stream_in(file(The_Elder_Scrolls_JSON))
+  
+  DatasetTXT <- read.delim(file.choose("The_Elder_Scrolls_V_report.txt"))
+```
+
+```{r}
+  str(df)
+```
+
+```{r}
+  str(DatasetTXT)
+```

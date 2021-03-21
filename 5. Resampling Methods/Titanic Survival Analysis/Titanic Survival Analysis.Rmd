@@ -1,0 +1,257 @@
+---
+title: "Titanic Survival Analysis"
+author: "Langtao Chen"
+date: 'Update: Mar 2, 2021'
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: 3
+  html_document: 
+    highlight: null
+    smart: no
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+In this example, we'll predict survival of passengers in Titanic by using validation set, k-fold cross-validation, and repeated k-fold cross-validation.
+
+
+# 1. Dataset
+
+We use the Titanic passenger survival data set in the titanic R package..
+
+```{r}
+# Clean the environment
+rm(list = ls())
+
+titanic <- read.csv('titanic_train.csv')
+str(titanic)
+```
+
+The dataset includes the following columns:
+
+- PassengerId: Passenger ID
+- Survived: Passenger Survival Indicator
+- Pclass: Passenger Class
+- Name: Name
+- Sex: Sex
+- Age: Age
+- SibSp: Number of Siblings/Spouses Aboard
+- Parch: Number of Parents/Children Aboard
+- Ticket: Ticket Number
+- Fare: Passenger Fare
+- Cabin: Cabin
+- Embarked: Port of Embarkation
+
+```{r}
+head(titanic)
+```
+
+```{r}
+summary(titanic)
+```
+
+From the summary statistics, we found that there are missing values. Let's select the key variables in the dataset and remove missing values from the dataset.
+
+```{r}
+library(dplyr)
+
+titanic <- titanic %>% 
+  select(Survived,Pclass,Sex,Age,SibSp,Parch,Fare) %>%
+  na.omit
+
+str(titanic)
+```
+
+Draw a scatterplot matrix.
+
+```{r}
+pairs(~Survived + Pclass + Age + SibSp + Parch + Fare, 
+      data = titanic,
+      col=ifelse(titanic$Survived==1, 'blue', 'orange'))
+```
+
+
+
+# 2. Validation Set Approach
+
+We use a single 80/20% split.
+```{r}
+library(caret)
+
+set.seed(1234)
+
+trainIndex <- createDataPartition(titanic$Survived, p = .8, list = FALSE)
+train_data <- titanic[ trainIndex,]
+test_data <- titanic[-trainIndex,]
+```
+
+```{r}
+# Fit a logistic regression model on the training dataset
+logit_fit <- glm(Survived ~ Pclass + Sex + Age + SibSp + Parch + Fare,
+                 family = binomial, data = train_data)
+summary(logit_fit)
+```
+
+```{r}
+# Predict on the test dataset
+pred_prob <- predict(object=logit_fit, newdata = test_data, type='response')
+pred_class <- ifelse(pred_prob > 0.5, 1, 0)
+
+confusionMatrix(factor(pred_class),factor(test_data$Survived), positive = "1")
+```
+
+# 3. K-Fold Cross-Validation
+
+## 3.1. A Simple Implementation Using caret Package
+
+We can use the train() method in caret package to easily train a regression (prediction) or classification model using k-fold cross-validation. Refer to the following link for all available models supported by the train() method.
+
+http://topepo.github.io/caret/available-models.html
+
+
+```{r}
+## Train a logistic regression model with 10-fold cross-validation
+fitControl <- trainControl(method = "cv",number = 10)
+
+set.seed(123)
+logit_fit2 <- train(factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch + Fare, 
+                    data = titanic,
+                    trControl = fitControl,
+                    method="glm", family=binomial(link='logit'))
+
+print(logit_fit2)
+
+confusionMatrix(logit_fit2)
+```
+
+As you can see from the above result, the train() method in caret package by default only supports two performance measures (the overall accuracy and kappa coefficient) for cross-validation classification. If we need to check other measures, we can directly implement the k-fold cross-validation.
+
+
+## 3.2. Directly Implement K-Fold Cross-Validation
+
+Let's manually implement k-fold cross-validation.
+
+In this example, let's choose logistic regression as the predictive model, and balanced accuracy as the performance measure.
+
+$Balanced\:Accuracy = \frac{Sensitivity + Specificity}{2}$
+
+```{r}
+# Implement k-fold cross-validation
+k.folds <- function(k) {
+    folds <- createFolds(titanic$Survived, k = k, list = TRUE, returnTrain = TRUE)
+    accuracies <- c()
+    
+    for (i in 1:k) {
+        model <- glm(Survived ~ Pclass + Sex + Age + SibSp + Parch + Fare, 
+                     data = titanic[folds[[i]],],family=binomial(link='logit'))
+        
+        pred_prob_cv <- predict(object = model, newdata = titanic[-folds[[i]],], type = "response")
+        pred_class_cv <- ifelse(pred_prob_cv > 0.5, 1, 0)
+
+        accuracies <- c(accuracies,
+                        confusionMatrix(factor(pred_class_cv),
+                                        factor(titanic[-folds[[i]], ]$Survived), positive = "1")$byClass['Balanced Accuracy'])
+    }
+    
+    accuracies
+}
+
+```
+
+```{r}
+# Execute the k-fold cross-validation
+set.seed(123)
+accuracies_cv <- k.folds(5)
+accuracies_cv
+```
+
+```{r}
+# Calculate the average balanced accuracy
+cat('Balanced Accuracy:\n Mean = ', mean(accuracies_cv),"; ",
+    'Standard Deviation = ',sd(accuracies_cv), ";\n",
+    '95% Confidence Interval = [',
+    mean(accuracies_cv) - sd(accuracies_cv) * 1.96, ", ",
+    mean(accuracies_cv) + sd(accuracies_cv) * 1.96,"]")
+```
+
+
+
+# 4. Repeated K-Fold Cross-Validation
+
+The mean and standard estimates in k-fold cross-validation is not very robust. We can repeat the k-fold cross-validation mulitple times to get more robust estimates.
+
+Repeated k-fold cross-validation is repeating k-fold cross-validation multiple times, with different folds split in each repetition.
+
+## 4.1. Directly Implement Repeated K-Fold Cross-Validation
+
+```{r}
+# Execute the repeated k-fold cross-validation
+set.seed(123)
+
+v <- c()
+v <- replicate(200, k.folds(5))
+
+accuracies_rcv <- c()
+
+for (i in 1 : 200) { 
+  accuracies_rcv <- c(accuracies_rcv, v[,i])
+}
+
+lci <- mean(accuracies_rcv) - sd(accuracies_rcv) * 1.96
+uci <- mean(accuracies_rcv) + sd(accuracies_rcv) * 1.96
+
+cat('Balanced Accuracy:\n Mean = ', mean(accuracies_rcv),"; ",
+    'Standard Deviation = ',sd(accuracies_rcv), ";\n",
+    '95% Confidence Interval = [',
+    mean(accuracies_rcv) - sd(accuracies_rcv) * 1.96, ", ",
+    mean(accuracies_rcv) + sd(accuracies_rcv) * 1.96,"]")
+
+```
+
+Let's show the distribution of balanced accuracy in all repeated k-fold cross-validations.
+
+```{r}
+hist(accuracies_rcv, prob = TRUE, density = 20,
+     main = "Histogram of Balanced Accuracy", 
+     xlab = "Repeated Cross-Validation Balanced Accuracy")
+
+lines(density(accuracies_rcv), col="red")
+```
+
+## 4.2. Use trainControl() to Configure Repeated CV
+
+As mentioned above, the train() method in caret package by default only supports two performance measures (the overall accuracy and kappa coefficient) for cross-validation classification. 
+
+An alternative way is to set the summary function as twoClassSummary, which supports sensitivity, specificity, and ROC curve.
+
+```{r}
+## Train a logistic regression model with repeated 5-fold cross-validation
+fitControl_rcv <- trainControl(method = "repeatedcv",
+                               number = 5, 
+                               repeats = 200,
+                               classProbs = TRUE,
+                               summaryFunction = twoClassSummary)
+
+set.seed(123)
+logit_fit_rcv <- train(factor(ifelse(Survived==1, 'Yes', 'No'), levels = c('Yes','No')) ~ 
+                         Pclass + Sex + Age + SibSp + Parch + Fare, 
+                       data = titanic,
+                       trControl = fitControl_rcv,
+                       method="glm", family=binomial(link='logit'),
+                       metric = "ROC")
+
+print(logit_fit_rcv)
+
+confusionMatrix(logit_fit_rcv)
+```
+
+```{r}
+cat('Balanced Accuracy = ',
+    sum(logit_fit_rcv$results['Spec'],logit_fit_rcv$results['Sens'])/2)
+```
+
+You can find the caret train result is very similar to the result of the direct implementation.
