@@ -1,0 +1,67 @@
+IST 5535 3/30 Notes
+
+
+as number of predictors increase, RSS always decreases and R^2 always increases.
+
+Thus, RSS and R^2 are not suitable for selecting the best model among models with different number of predictors
+
+The following add a heavier penalty:
+Cp Statistics
+AIC (Akaike informaiton Criterion)
+BIC(Bayesian Information Criterion)
+Adjusted R^2
+
+Smaller Cp, AIC, and BIC are better; Larger adjustyed R^2 is better
+
+
+
+
+Ridge Regression
+
+The OLS fitting procedure minimized the RSS
+
+The ridge regression minimizes
+where Lambda >= 0 is a tuning parameter
+
+
+Shrinkage Penalty
+
+When Lambda is large, the impact of the penalty term grows. B1(j=1,2,...,p) has to be close to 0
+
+As lambda increases, the ridge coefficient estimates shrink towards 0
+
+
+
+
+WHY DOES RIDGE REGRESSION IMPROVE OVER OLS
+
+OLS estimates have low bias
+
+
+
+
+THE LASSO
+
+One problem for ridge regression:
+	It shrinks all coefficients towards zero, but it iwll not set any of them exactly to zero;
+
+	This ridge regression cannot conduct 
+
+	slide 24
+
+	Thus, lasso performs variable selection Bj = 0
+
+
+21. 25. Depending on the value of lambda, lasso can produce a model with any number of variables.
+
+
+
+
+Selecting the Tuning Parameter
+
+
+
+
+
+
+

@@ -12,9 +12,11 @@ library(dplyr)
 library(caret)
 ```
 # 1 
-  Import the data, show the structure of the dataset. Explain what variables in the dataset that 
+  Import the data, show the structure of the dataset. Explain what variables in the dataset that
 are currently represented as quantitative variables but should be measured by nominal scale.
 Do not include those dummy variables.
+
+ID and Zip_code are nominal variables and I will remove them so they will not be included as dummy variables.
 
 ```{r}
 df <- read.csv("UniversalBank.csv", stringsAsFactors = TRUE)
@@ -26,10 +28,17 @@ str(df)
   Convert the data type of Education variable to dummies. Also remove the customer ID and 
 zip code from the dataset.
 ```{r}
+library(fastDummies)
+df <- df %>% mutate(dummy_cols(Education))
 df$Education <- factor(df$Education, levels = c(1, 2, 3),
                        labels = c("Undergrad", "Graduate", "Advanced/Professional"))
 df$Personal_Loan <- factor(df$Personal_Loan)
-df <- select(df, -c(Id, ZIP_Code))
+df <- select(df, -c(Id, ZIP_Code, Education, ".data"))
+df <- df %>% rename(
+  "Undergrad" = ".data_1",
+  "Graduate" = ".data_2",
+  "Advanced/Professional" = ".data_3"
+)
 glimpse(df)
 ```
 
@@ -113,18 +122,9 @@ confusionMatrix(logit_fit_rcv)
 ```
 
 
-# Train LDA //sensitivity // specificity // accuracy
+# Train LDA
+
 ```{r}
-set.seed(100)
-LDA_fit <- train(Personal_Loan ~ ., data = df,
-                       trControl = fitControl, method = "lda",
-                       verbose=FALSE)
-
-print(LDA_fit)
-
-# In-sample performance
- confusionMatrix(LDA_fit)
-
 set.seed(100)
 LDA_fit_rcv <- train(factor(ifelse(Personal_Loan==1, 'Yes', 'No'), levels = c('Yes','No')) ~ ., 
                        data = df,
@@ -132,84 +132,179 @@ LDA_fit_rcv <- train(factor(ifelse(Personal_Loan==1, 'Yes', 'No'), levels = c('Y
                        method="lda", family=binomial(link='logit'),
                        metric = "ROC")
 
-  print(LDA_fit_rcv)
+print(LDA_fit_rcv)
 
 confusionMatrix(LDA_fit_rcv)
-
 ```
 
-# trying to get LDA balanced accuracy
+
+
+
+
+## trying to get LDA balanced accuracy
+
+
+LDA_pred <- predict(LDA_fit_rcv, newdata = df)
+LDA_pred <- factor(ifelse(LDA_pred==1, 'Yes', 'No'), levels = c('Yes', 'No'))
+confusionMatrix(LDA_pred, df$Personal_Loan, positive = "1")
+
+LDA_pred <- factor(LDA_pred, levels = c("No", "Yes"),
+                       labels = c("0", "1"))
+
+
+
+confusionMatrix(LDA_pred, df$Personal_Loan, positive = "1")
+table(LDA_pred)
+# LDA Stats
 ```{r}
-
-k.folds <- function(k) {
-  folds <- createFolds(df$Personal_Loan, k = k, list = TRUE, returnTrain = TRUE)
-  accuracies <- c()
-  
-  for (i in 1:k) {
-    model <- glm(Personal_Loan ~ ., data = df[folds[[i]],], family = binomial(link = 'gmb'))
-    
-    pred_prob_cv <- predict(object = model, newdata = df[-folds[[i]],], type = "response")
-    pred_class_cv <- ifelse(pred_prob_cv > 0.5, 1, 0)
-    
-    
-    accuracies <- c(accuracies,
-                    confusionMatrix(factor(pred_class_cv),
-                                    df[-folds[[i]], ]$Personal_Loan, positive = "1")$byClass['Balanced Accuracy'])
-  }
-  accuracies
-}
-
-set.seed(100)
-accuracies_cv <- k.folds(5)
-accuracies_cv
-# Calculate the average balanced accuracy
-cat('Balanced Accuracy:\n Mean = ', mean(accuracies_cv),"; ",\
-    'Standard Deviation = ',sd(accuracies_cv), ";\n",
-    '95% Confidence Interval = [',
-    mean(accuracies_cv) - sd(accuracies_cv) * 1.96, ", ",
-    mean(accuracies_cv) + sd(accuracies_cv) * 1.96,"]")
-
+confusionMatrix(factor(predict(LDA_fit_rcv, newdata = df), levels = c("No", "Yes"),
+                       labels = c("0", "1")),
+                df$Personal_Loan, positive = '1')
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
 
 # Train QDA
 ```{r}
-set.seed(123)
-QDA_fit <- train(Personal_Loan ~ ., data = df,
-                       trControl = fitControl, method = "qda",
-                       verbose=FALSE)
+
+set.seed(100)
+QDA_fit <- train(factor(ifelse(Personal_Loan==1, 'Yes', 'No'), levels = c('Yes','No')) ~ ., 
+                       data = df,
+                       trControl = fitControl_rcv,
+                       method="qda", family=binomial(link='logit'),
+                       metric = "ROC")
 
 print(QDA_fit)
 
-# In-sample performance
 confusionMatrix(QDA_fit)
+
+
+
+
+```
+
+# QDA Stats
+```{r}
+confusionMatrix(factor(predict(QDA_fit, newdata = df), levels = c("No", "Yes"),
+                       labels = c("0", "1")),
+                df$Personal_Loan, positive = '1')
+```
+
+#Bootstrap
+```{r}
+# Set the number of bootstraps
+n_bootstraps <- 1000
+
+# Initiate vectors of performance metric
+bootstrap_acc_logit <- NULL
+bootstrap_acc_lda <- NULL
+bootstrap_acc_qda <- NULL
+
+# Set the random number seed
+set.seed(100)
+
+for (i in 1:n_bootstraps){
+  # Get a bootstrap of test dataset
+  resample_test <- df[sample(nrow(df), replace = TRUE),]
+    
+  # Calculate predicted outcome
+  logit_resample_pred <- predict(logit_fit_rcv, newdata = resample_test)
+  #logit_resample_pred <- ifelse(logit_resample_prob > 0.5, 1, 0)
+  
+  lda_resample_pred <- predict(LDA_fit_rcv, newdata = resample_test)
+  qda_resample_pred <- predict(QDA_fit, newdata = resample_test)
+    
+  # Calculate accuracy of the logit model using the bootstrap
+  bootstrap_acc_logit <- c(bootstrap_acc_logit, mean(logit_resample_pred == factor(ifelse(resample_test$Personal_Loan==1, 'Yes', 'No'), levels = c('Yes','No'))))
+    
+  # Calculate f1 score of the logit model using the bootstrap
+  bootstrap_acc_lda <- c(bootstrap_acc_lda, mean(lda_resample_pred == factor(ifelse(resample_test$Personal_Loan==1, 'Yes', 'No'), levels = c('Yes','No'))))
+  
+  bootstrap_acc_qda <- c(bootstrap_acc_qda, mean(qda_resample_pred == factor(ifelse(resample_test$Personal_Loan==1, 'Yes', 'No'), levels = c('Yes','No'))))
+}
+```
+
+```{r}
+summary(bootstrap_acc_logit)
+```
+
+```{r}
+summary(bootstrap_acc_lda)
+```
+```{r}
+summary(bootstrap_acc_qda)
 ```
 
 
+```{r}
+# Plot the accuracy
+
+par(mfrow=c(1,3))
+
+hist(bootstrap_acc_logit,main = "Histogram of Logit Accuracy")
+hist(bootstrap_acc_lda, main = "Histogram of LDA Accuracy")
+hist(bootstrap_acc_qda, main = "Histogram of QDA Accuracy")
+```
+
+```{r}
+cat("95% CI of Logit = ",
+    "(",
+    quantile(bootstrap_acc_logit, 0.025),
+    ", ",
+    quantile(bootstrap_acc_logit, 0.975),
+    ")")
+```
+
+```{r}
+cat("95% CI of LDA = ",
+    "(",
+    quantile(bootstrap_acc_lda, 0.025),
+    ", ",
+    quantile(bootstrap_acc_lda, 0.975),
+    ")")
+```
+
+```{r}
+cat("95% CI of QDA = ",
+    "(",
+    quantile(bootstrap_acc_qda, 0.025),
+    ", ",
+    quantile(bootstrap_acc_qda, 0.975),
+    ")")
+```
+
+```{r}
+cat("95% CI of Logit (normal approximation) = ",
+    "(",
+    mean(bootstrap_acc_logit)-1.96*sd(bootstrap_acc_logit),
+    ", ",
+    mean(bootstrap_acc_logit)+1.96*sd(bootstrap_acc_logit),
+    ")")
+```
+
+```{r}
+cat("95% CI of LDA (normal approximation) = ",
+    "(",
+    mean(bootstrap_acc_lda, 0.025)-1.96*sd(bootstrap_acc_lda),
+    ", ",
+    mean(bootstrap_acc_lda, 0.025)+1.96*sd(bootstrap_acc_lda),
+    ")")
+```
+
+```{r}
+cat("95% CI of QDA (normal approximation) = ",
+    "(",
+    mean(bootstrap_acc_qda, 0.025)-1.96*sd(bootstrap_acc_qda),
+    ", ",
+    mean(bootstrap_acc_qda, 0.025)+1.96*sd(bootstrap_acc_qda),
+    ")")
+```
 
 
+## 4
+When comparing the three models based on sensitivity if a personal loan will be accepted. QDA performed significantly better then Logit and LDA.
 
-
-
-
-
-
-
+Logistic regression performs better compared to LDA and QDA when predicting if a personal loan will be accepted using balanced accuracy.
+Logistic Regression was slightly higher with balanced accuracy while LDA and QDA were both lower.
+Balanced was much closer compared to using sensitivity.

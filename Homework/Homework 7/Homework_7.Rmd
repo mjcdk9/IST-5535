@@ -1,0 +1,112 @@
+---
+title: "Homework_7"
+author: "Mark Chafin"
+date: "4/1/2021"
+output:
+  html_document:
+    toc: yes
+    toc_depth: '3'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls())
+library(dplyr)
+library(caret)
+library(mlbench)
+library(tidyverse)
+library(leaps)
+library(glmnet)
+library(GGally)
+library(ggplot2)
+```
+
+```{r}
+df <- read.csv("HW7Data.csv")
+```
+
+```{r}
+y <- df$y
+x <- df[-7]
+p.values <- map_dbl(x, function(x) cor.test(x, y)$p.value)
+tibble(Variable = paste0("x", 1:6), `p-value` = p.values)
+ggpairs(df, progress = FALSE)
+
+```
+
+# Best Subset
+Use regsubsets to find the best subset.
+```{r}
+pred.matrix <- as.matrix(x)
+best <- regsubsets(pred.matrix, y, nvmax = 6)
+
+stats <- summary(best)
+stats_df <- as_tibble(stats[2:6]) %>% mutate(Model.Size = 1:6)
+
+stats_long <- stats_df %>% gather("Metric", "Value", -Model.Size)
+ggplot(stats_long, aes(Model.Size, Value)) + geom_line() + geom_point() +
+  facet_wrap(vars(Metric), ncol = 2, scales = "free_y")
+
+n <- which.min(stats_df$bic)
+stats$outmat[n,]
+plot(best)
+```
+
+# Forward Selection
+Use regsubsets to use forward selection
+```{r}
+pred.matrix <- as.matrix(x)
+forward <- regsubsets(pred.matrix, y, nvmax = 6, method = "forward")
+
+stats <- summary(forward)
+stats_df <- as_tibble(stats[2:6]) %>% mutate(Model_Size = 1:6)
+
+stats_long <- stats_df %>% gather("Metric", "Value", -Model_Size)
+ggplot(stats_long, aes(Model_Size, Value)) + geom_line() + geom_point() +
+  facet_wrap(vars(Metric), ncol = 2, scales = "free_y")
+
+n <- which.min(stats_df$bic)
+stats$outmat[n,]
+plot(forward)
+```
+
+# Backward Selection
+Use regsubsets to use backward selection
+```{r}
+pred.matrix <- as.matrix(x)
+backward <- regsubsets(pred.matrix, y, method = "backward")
+
+stats <- summary(backward)
+stats_df <- as_tibble(stats[2:6]) %>% mutate(Model_Size = 1:6)
+
+stats_long <- stats_df %>% gather("Metric", "Value", -Model_Size)
+ggplot(stats_long, aes(Model_Size, Value)) + geom_line() + geom_point() +
+  facet_wrap(vars(Metric), ncol = 2, scales = "free_y")
+
+n <- which.min(stats_df$bic)
+stats$outmat[n,]
+
+plot(backward)
+```
+
+# Lasso
+Use Lasso to fit the entire data set using 10-fold cv to find optimal value.
+```{r}
+set.seed(123)
+lambdas <- 10^seq(-1, -4, by = -.01)
+ScaledPredMatrix <- scale(pred.matrix, center = TRUE, scale = TRUE)
+lasso <- cv.glmnet(ScaledPredMatrix, y, alpha = 1, lambda = lambdas, standardize = TRUE, nfolds = 10)
+
+lasso_df <- tibble(lambda = lasso$lambda, cv_error = lasso$cvm)
+ggplot(lasso_df, aes(lambda, cv_error)) + geom_line() + geom_point()
+
+
+# Best lambda
+lambda_best <- lasso$lambda.min 
+
+lasso_model <- glmnet(ScaledPredMatrix, y, alpha = 1, lambda = lambda_best,
+                      standardize = TRUE)
+
+coef(lasso_model)
+```
+
