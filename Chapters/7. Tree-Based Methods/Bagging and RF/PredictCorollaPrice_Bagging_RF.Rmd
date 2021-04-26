@@ -1,0 +1,172 @@
+---
+title: "Predict the Price of Used Corolla - Bagging and Random Forest"
+author: "Langtao Chen"
+date: 'Initial: Feb 20, 2017  <br> Update: March 30, 2020'
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: 3
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: '3'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+&nbsp;
+&nbsp;
+
+
+\newpage
+
+In this example, we'll use bagging and random forest (RF) to predict the price of used Corolla.
+
+# 1.Data
+
+Import the data from the csv file.
+
+```{r}
+# Clean the environment
+rm(list = ls())
+
+# Read data file
+df <- read.csv("ToyotaCorolla.csv")
+```
+
+```{r}
+# Show the head of the dataset
+head(df)
+```
+
+```{r}
+# Show the structure of the dataset
+str(df)
+```
+
+```{r}
+# Summary statistics
+summary(df)
+```
+
+From the summary statistics, we found that there is no missing value.
+
+# 2. Data Partitioning
+
+We use a single 80/20% split.
+
+```{r}
+library(caret)
+set.seed(1234)
+trainIndex <- createDataPartition(df$Price, p = .8, list = FALSE)
+
+train_data <- df[ trainIndex,]
+test_data  <- df[-trainIndex,]
+
+nrow(train_data)
+```
+
+```{r}
+nrow(test_data)
+```
+
+# 3. Bagging and Random Forest
+
+We can use the randomForest() method in the randomForest package to implement the bagging and random forests. Bagging is special case of random forest with mtry = p.
+
+## 3.1. Bagging
+
+```{r}
+library(randomForest)
+
+# Fit a bagged tree
+bag_corolla <- randomForest(Price~., data = train_data,
+                            mtry = 9, importance = TRUE)
+
+bag_corolla
+
+```
+
+mtry=9 means that all 9 predictors are considered for each split of the tree. Thus, this is a bagged regression tree.
+
+Test the performance of the bagged tree on the test dataset.
+
+```{r}
+library(caret)
+
+bag_yhat <- predict(bag_corolla, newdata = test_data)
+
+postResample(bag_yhat, test_data$Price)
+```
+
+## 3.2. Random Forest
+
+To fit a random forest, we can set a different value for the mtry parameter. The default value of mtry is p/3 in the randomForest() method. Here let's set mtry = 5.
+
+```{r}
+# Fit a random forest
+rf_corolla <- randomForest(Price~., data = train_data,
+                           mtry = 5, importance = TRUE)
+
+rf_corolla
+
+```
+
+Test the performance of the random forest on the test dataset.
+
+```{r}
+rf_yhat <- predict(rf_corolla, newdata = test_data)
+
+postResample(rf_yhat, test_data$Price)
+```
+
+We can see that the random forest has a better prediction performance than the bagged regression tree.
+
+```{r}
+# Plot the importance
+varImpPlot(rf_corolla)
+```
+
+We can see that age of the used corolla is the most important feature. If age is excluded from the model, the increase in MSE and node purity will be very large. The three most important features are age, weight, and KM.
+
+
+Let's further tune the parameter mtry by using a repeated 10-fold cross-validation. Here, we use the train() method in the caret package.
+
+```{r}
+tuneGrid <- data.frame(mtry =1:9)
+
+tuneGrid
+```
+```{r}
+library(lubridate)
+
+control <- trainControl(method = 'repeatedcv', 
+                        number = 10,
+                        repeats = 3)
+set.seed(123)
+
+# print out system time before training
+start_t <- Sys.time()
+cat("",cat("Training started at:",format(start_t, "%a %b %d %X %Y")))
+
+rf_tuned <- train(Price ~ ., data = train_data,
+                  method = 'rf',
+                  trControl = control,
+                  tuneGrid = tuneGrid)
+
+# print out system time after training
+finish_t <- Sys.time()
+cat("",cat("Training finished at:",format(finish_t, "%a %b %d %X %Y")))
+
+cat("The training process finished in",difftime(finish_t,start_t,units="mins"), "minutes")
+
+print(rf_tuned)
+```
+
+```{r}
+plot(rf_tuned)
+```
+
+The cross-validation shows that mtry = 7 leads to the best model. However, the difference between mtry = 5 and mtry = 7 is not very large. Our initial choice mtry = 5 is not bad!

@@ -1,0 +1,241 @@
+---
+title: "Bootstrap"
+author: "Langtao Chen"
+date: 'Update: Mar 2, 2021'
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: '3'
+  pdf_document:
+    toc: yes
+    toc_depth: 3
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, echo=FALSE}
+# Clean the environment
+rm(list = ls())
+```
+
+Bootstrap is a general method of quantifying uncertainty of a statistical method. Bootstrap can easily derive standard errors and confidence intervals for complicated statistics, thus making hypothesis testing simple and straightforward.
+
+In many cases, we can easily get the performance measure of multiple statistical learning models. Is a 92% accuracy significantly better than a 91% accuracy? We cannot directly evaluate the significance of performance difference since we don't know the distribution of the performance metric yet.
+
+In this example, let's use the bootstrap method to estimate the distribution of performance metrics for different models, in the context of personal loan acceptance in banking industry. With such estimates, we can test hypothesis regarding the difference of performance for different models.
+
+Let's compare two models including logit and LDA here. As the logit without class weight has too low recall, we'll not compare it in this section. Thus, our (alternative) hypothesis is:
+
+Hypothesis: The logit and LDA models have different performance in terms of prediction accuracy in the Universal Bank data.
+
+# 1. Data
+
+The data file "UniversalBank.csv" contains a dataset of 5000 customers of the Universal Bank.
+
+Below is the description of columns in the dataset.
+
+- Id: Customer ID
+- Age: Customer's age in completed years
+- Experience: #years of professional experience
+- Income: Annual income of the customer (1000 dollars)
+- ZIPCode: Home Address ZIP code.
+- Family: Family size of the customer
+- CCAvg: Avg. spending on credit cards per month (1000 dollors)
+- Education: Education Level. 1: Undergrad; 2: Graduate; 3: Advanced/Professional
+- Mortgage: Value of house mortgage if any. (1000 dollars)
+- Personal_Loan: Did this customer accept the personal loan offered in the last campaign?
+- Securities_Account: Does the customer have a securities account with the bank?
+- CD_Account: Does the customer have a certificate of deposit (CD) account with the bank?
+- Online: Does the customer use internet banking facilities?
+- CreditCard: Does the customer use a credit card issued by UniversalBank?
+
+```{r}
+# Read in data
+bank <- read.csv("UniversalBank.csv")
+
+# Structure of the dataset
+str(bank)
+```
+
+
+```{r}
+head(bank)
+```
+
+Let's drop customer ID and zip code and convert education as a factor.
+
+```{r}
+bank$Id <- NULL
+
+bank$ZIP_Code <- NULL
+
+bank$Education <- factor(bank$Education)
+
+```
+
+```{r}
+summary(bank)
+```
+
+
+# 2. Predictive Modeling
+
+## 2.1. Data Partition
+
+Randomly split the dataset into a train (70%) and a test set (30%).
+
+```{r}
+index <- 1:nrow(bank)
+set.seed(123)
+train_index <- sample(index, round(length(index)*0.7))
+train_set <- bank[train_index,]
+test_set <- bank[-train_index,]
+```
+
+## 2.2. Fit a Logistic Regression Model and Test Its Performance
+
+```{r}
+# Logistic regression
+logit.fit <- glm(Personal_Loan ~ .,
+             family=binomial(link='logit'), data = train_set)
+
+summary(logit.fit)
+```
+
+Predict whether a customer accept the loan or not on the test dataset.
+
+```{r}
+logit_test_prob <- predict(logit.fit, newdata = test_set, type="response")
+
+logit_test_pred <- ifelse(logit_test_prob > 0.5, 1, 0)
+
+```
+
+
+```{r}
+library(caret)
+
+confusionMatrix(factor(logit_test_pred),factor(test_set$Personal_Loan), positive = "1")
+
+```
+
+## 2.3. Fit an LDA Model and Test Its Performance
+
+```{r}
+library(MASS)
+lda.fit=lda(Personal_Loan ~ ., data = train_set)
+lda.fit
+```
+
+```{r}
+lda.pred <- predict(lda.fit, newdata = test_set)
+
+confusionMatrix(factor(lda.pred$class),factor(test_set$Personal_Loan), positive = "1")
+```
+
+## 2.4. Use Bootstrap to Compare Two Models
+
+```{r}
+# Set the number of bootstraps
+n_bootstraps <- 1000
+
+# Initiate vectors of performance metric
+bootstrap_acc_logit <- NULL
+bootstrap_acc_lda <- NULL
+
+# Set the random number seed
+set.seed(100)
+
+for (i in 1:n_bootstraps){
+  # Get a bootstrap of test dataset
+  resample_test <- test_set[sample(nrow(test_set), replace = TRUE),]
+    
+  # Calculate predicted outcome
+  logit_resample_prob <- predict(logit.fit, newdata = resample_test, type="response")
+  logit_resample_pred <- ifelse(logit_resample_prob > 0.5, 1, 0)
+  
+  lda_resample_pred <- predict(lda.fit, newdata = resample_test)
+    
+  # Calculate accuracy of the logit model using the bootstrap
+  bootstrap_acc_logit <- c(bootstrap_acc_logit, mean(logit_resample_pred == resample_test$Personal_Loan))
+    
+  # Calculate f1 score of the logit model using the bootstrap
+  bootstrap_acc_lda <- c(bootstrap_acc_lda, mean(lda_resample_pred$class == resample_test$Personal_Loan))
+}
+```
+
+```{r}
+summary(bootstrap_acc_logit)
+```
+
+
+```{r}
+summary(bootstrap_acc_lda)
+```
+
+```{r}
+# Plot the accuracy
+
+par(mfrow=c(1,2))
+
+hist(bootstrap_acc_logit,main = "Histogram of Logit Accuracy")
+hist(bootstrap_acc_lda, main = "Histogram of LDA Accuracy")
+
+```
+
+The mean accuracy of the logit model is 0.9612, while the mean accuracy of the LDA model is 0.9493. Do the two accuracy scores have significant difference?
+
+Now, let's calculate 95% confidence intervals using the percentile method.
+
+```{r}
+cat("95% CI of Logit = ",
+    "(",
+    quantile(bootstrap_acc_logit, 0.025),
+    ", ",
+    quantile(bootstrap_acc_logit, 0.975),
+    ")")
+```
+
+It shows that the accuracy of the logit model belongs to the range (0.951, 0.971) with 95% confidence.
+
+```{r}
+cat("95% CI of LDA = ",
+    "(",
+    quantile(bootstrap_acc_lda, 0.025),
+    ", ",
+    quantile(bootstrap_acc_lda, 0.975),
+    ")")
+```
+
+It shows that the accuracy of the LDA model belongs to the range (0.939, 0.961) with 95% confidence.
+
+As the two intervals have overlap, the difference in accuracy score between the logit and LDA models is not statistically significant. We don't have evidence to support the hypothesis that the two models have different performance in terms prediction accuracy. That is to say, LDA has the similar performance with logit model in terms of prediction accuracy.
+
+Another way to calculate the 95% confidence interval is to use normal approximation. Assume that the statistic x (accuracy score in this case) follows a normal distribution, then the 95% confidence interval of x is calculated as:
+
+$$[mean(x)-1.96*std(x), mean(x)+1.96*std(x)]$$
+```{r}
+cat("95% CI of Logit (normal approximation) = ",
+    "(",
+    mean(bootstrap_acc_logit)-1.96*sd(bootstrap_acc_logit),
+    ", ",
+    mean(bootstrap_acc_logit)+1.96*sd(bootstrap_acc_logit),
+    ")")
+```
+
+```{r}
+cat("95% CI of LDA (normal approximation) = ",
+    "(",
+    mean(bootstrap_acc_lda, 0.025)-1.96*sd(bootstrap_acc_lda),
+    ", ",
+    mean(bootstrap_acc_lda, 0.025)+1.96*sd(bootstrap_acc_lda),
+    ")")
+```
+
+We get the similar result by using the normal approximation to calculate the 95% confidence interval.
+
+The percentile method and normal approximation method have similar results. However, the percentile method is more preferred as it is a non-parametric method: we don't need to make assumption regarding the distribution of the accuracy score.

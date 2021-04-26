@@ -1,0 +1,322 @@
+---
+title: "Linear Model Selection"
+author: "Langtao Chen"
+date: 'Initial: Jan 24, 2019 <br> Update: Mar 13, 2021'
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: 3
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: '3'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+&nbsp;
+&nbsp;
+
+
+\newpage
+
+```{r, echo=FALSE}
+# Clean the environment
+rm(list = ls())
+```
+
+# 1. Data
+
+In this example, we use the used Toyota Corolla dataset to demonstrate how to conduct linear model selection. The response variable is price of the used car.
+
+```{r}
+df <- read.csv('ToyotaCorolla_FullData.csv')
+str(df)
+```
+
+```{r}
+summary(df)
+```
+
+```{r}
+hist(df$Price,
+     main = 'Histogram of Price',
+     xlab = 'Price')
+```
+
+# 2. Data Preparation
+
+## 2.1. Data Cleansing
+
+Let's remove Id from the dataset because it's not a good predictor. We remove the Cylinders column since it does not have variability in the dataset (all cars have 4 cylinders). We also remove the model column as it contains a large number of classes (i.e., 319 levels) that have redundant information with other columns.
+
+```{r}
+df$Id <- NULL
+df$Cylinders <- NULL
+df$Model <- NULL
+```
+
+Let's explore the relationship between age and manufacturing year and month.
+
+```{r}
+summary(lm(Age_08_04 ~ Mfg_Month + Mfg_Year, data = df))
+```
+
+Let's remove manufacturing month and year from the dataset since there is a linear dependence between the age and the two variables.
+
+```{r}
+df$Mfg_Month <- NULL
+df$Mfg_Year <- NULL
+```
+
+## 2.2. Data Split
+
+Let's split the whole dataset into training (80%) and test (20%) sets.
+
+```{r}
+set.seed(123)
+
+train <- sample(1:nrow(df),nrow(df)*0.80)
+
+train_df <- df[train,]
+test_df <- df[-train,]
+
+dim(train_df)
+```
+```{r}
+dim(test_df)
+```
+
+## 2.3. Create Input Matrix
+
+Many R functions such as lm() support using formula to specify model. But it's not convinient to use formula to conduc model selection when there are qualitative predictors. We can use the model.matrix() method to create the input matrix. The model.matrix() method can automatically transform qualitative variables into dummy variables.
+
+```{r}
+# Create input matrix, removing the intercept
+train_x <- model.matrix(Price ~ ., data = train_df)[,-1]
+colnames(train_x)
+```
+
+```{r}
+train_y <- train_df$Price
+```
+
+```{r}
+test_x <- model.matrix(Price ~ ., data = test_df)[,-1]
+colnames(test_x)
+```
+
+
+```{r}
+test_y <- test_df$Price
+```
+
+# 3. Linear Model Selection
+
+## 3.1. Best Subset Selection
+
+We can use the regsubsets() method in leaps package to conduct the best subset selection.
+
+```{r}
+library(leaps)
+
+old_time <- Sys.time()
+
+fit_best <- regsubsets(x = train_x, y = train_y, nvmax = 360, really.big = TRUE)
+fit_best_sum <- summary(fit_best)
+
+new_time <- Sys.time()
+
+cat('Time Spent in Best Subset Selection:', new_time - old_time, 'seconds')
+```
+
+We notice that best subset selection is time consuming, compared with step-wise selection.
+
+```{r}
+# Print the adjusted R2
+fit_best_sum$adjr2
+```
+
+```{r}
+# Find the position where adjusted R2 is the largest
+which.max(fit_best_sum$adjr2)
+```
+
+```{r}
+# Find the position where Cp is the smallest
+which.min(fit_best_sum$cp)
+```
+
+```{r}
+# Find the position where BIC is the smallest
+which.min(fit_best_sum$bic)
+```
+
+```{r}
+# Plot RSS, Adj R2, Cp, and BIC across the number of variables
+
+par(mfrow =c(2,2))
+
+plot(fit_best_sum$rss,
+     xlab=" Number of Variables",
+     ylab=" RSS",
+     type="l")
+
+plot(fit_best_sum$adjr2,
+     xlab =" Number of Variables",
+     ylab=" Adjusted R2",
+     type="l")
+points(which.max(fit_best_sum$adjr2),
+       fit_best_sum$adjr2[which.max(fit_best_sum$adjr2)],
+       col ="red",cex =2, pch =20)
+
+plot(fit_best_sum$cp,
+     xlab =" Number of Variables",
+     ylab=" Cp",
+     type="l")
+points(which.min(fit_best_sum$cp),
+       fit_best_sum$cp[which.min(fit_best_sum$cp)],
+       col ="red",cex =2, pch =20)
+
+plot(fit_best_sum$bic,
+     xlab =" Number of Variables",
+     ylab=" BIC",
+     type="l")
+points(which.min(fit_best_sum$bic),
+       fit_best_sum$bic[which.min(fit_best_sum$bic)],
+       col ="red",cex =2, pch =20)
+
+```
+
+If we use BIC as the criterion of model selection, the final model should include 12 predictors.
+
+```{r}
+coef(fit_best, 12)
+```
+
+
+## 3.2. Stepwise Selection
+
+We can also use the regsubsets() method in leaps package to conduct the stepwise selection.
+
+### 3.2.1. Forward Stepwise Selection
+
+
+```{r}
+old_time <- Sys.time()
+
+fit_fwd <- regsubsets(x = train_x, y = train_y, nvmax = 42, method = 'forward')
+fit_fwd_sum <- summary(fit_fwd)
+
+new_time <- Sys.time()
+cat('Time Spent in Forward Stepwise Selection:', new_time - old_time, 'seconds')
+
+```
+
+We notice that stepwise selection is computationally cheap, compared with the best subset selection.
+
+```{r}
+# Find the position where adjusted R2 is the largest
+which.max(fit_fwd_sum$adjr2)
+```
+
+```{r}
+# Find the position where Cp is the smallest
+which.min(fit_fwd_sum$cp)
+```
+
+```{r}
+# Find the position where BIC is the smallest
+which.min(fit_fwd_sum$bic)
+```
+
+If we use BIC as the criterion of model selection, the final model should include 12 predictors.
+
+```{r}
+coef(fit_fwd, 12)
+```
+
+### 3.2.2. Backward Stepwise Selection
+
+```{r}
+old_time <- Sys.time()
+
+fit_bwd <- regsubsets(x = train_x, y = train_y, nvmax = 42, method = 'backward')
+fit_bwd_sum <- summary(fit_bwd)
+
+new_time <- Sys.time()
+cat('Time Spent in Backward Stepwise Selection:', new_time - old_time, 'seconds')
+
+```
+
+```{r}
+# Find the position where adjusted R2 is the largest
+which.max(fit_bwd_sum$adjr2)
+```
+
+```{r}
+# Find the position where Cp is the smallest
+which.min(fit_bwd_sum$cp)
+```
+
+```{r}
+# Find the position where BIC is the smallest
+which.min(fit_bwd_sum$bic)
+```
+
+If we use BIC as the criterion of model selection, the final model should include 11 predictors.
+
+```{r}
+coef(fit_bwd, 11)
+```
+
+We note that best subset, forward stepwise, and backward stepwise selection methods may result in different final models.
+
+## 3.3. Test the Peformance of Linear Model Selection.
+
+In the above, we used best subset selection and stepwise selection on the training dataset. We can compare the full model and the more parsimonous model on the test dataset. As an example, let's compare the full model with all predictors and the refined model suggested by best subset selection using Cp as the criterion.
+
+```{r}
+# Predictor names in the best subset solution with 24 predictors
+names(coef(fit_best, 24))[-1]
+```
+
+```{r}
+train_df_subset <- data.frame(train_x[,names(coef(fit_best, 24))[-1]])
+train_df_subset$Price <- train_y
+str(train_df_subset)
+```
+
+### 3.3.1. Performance of the Final Model
+
+```{r}
+final_model <- lm(Price ~ ., data = train_df_subset)
+summary(final_model)
+```
+
+```{r}
+# Calculate performance of the final model
+price_pred <- predict(final_model, data.frame(test_x))
+
+library(caret)
+postResample(pred = price_pred, obs = test_y)
+```
+
+### 3.3.2. Performance of the Full Model
+
+```{r}
+# Fit a full linear model with all predictors
+full_model <- lm(Price ~ ., data = train_df)
+price_pred <- predict(full_model, test_df)
+```
+
+
+```{r}
+# Calculate performance of the final model
+library(caret)
+postResample(pred = price_pred, obs = test_y)
+```
+
+From the above results, we can find that the final model suggested by the best subset selection method and the full model with all predictors have similar performance.

@@ -1,0 +1,241 @@
+---
+title: "Predict the Price of Used Corolla - SVM"
+author: "Langtao Chen"
+date: 'Initial: Feb 20, 2017  <br> Update: Apr 13, 2021'
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: 3
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: '3'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+&nbsp;
+&nbsp;
+
+In this example, we'll use SVM to predict the price of used Corolla.
+
+# 1. Data
+
+Import the data from the csv file.
+
+```{r}
+# Clean the environment
+rm(list = ls())
+
+# Read data file
+df <- read.csv("ToyotaCorolla.csv", stringsAsFactors = TRUE)
+```
+
+```{r}
+# Show the head of the dataset
+head(df)
+```
+
+```{r}
+# Show the structure of the dataset
+str(df)
+```
+
+```{r}
+# Summary statistics
+summary(df)
+```
+
+From the summary statistics, we found that there is no missing value.
+
+# 2. Data Partitioning
+
+We use a single 80/20% split.
+
+```{r}
+library(caret)
+set.seed(1234)
+trainIndex <- createDataPartition(df$Price, p = .8, list = FALSE)
+
+train_data <- df[ trainIndex,]
+test_data  <- df[-trainIndex,]
+
+nrow(train_data)
+```
+
+```{r}
+nrow(test_data)
+```
+
+# 3. Data Normalization
+
+It's usually recommended to normalize data before apply support vector machines. Here we use the preProcess() method in caret package to normalize variables. 
+
+Note: In the method parameter, we set "scale" to transform the standard deviation as 1, and set "center" to center the variable such that the mean will be zero. Use the "scale" and "center" methods together, we can normalize the variables such that mean = 0, sd = 1.
+
+```{r}
+# Load library
+library(caret)
+
+# calculate the pre-process parameters from the training dataset
+preprocessParams <- preProcess(train_data, method = c("scale","center"))
+
+# summarize transform parameters
+print(preprocessParams)
+
+```
+
+```{r}
+# transform the training dataset using the parameters
+train_scaled <- predict(preprocessParams, train_data)
+
+# summarize the transformed dataset
+stargazer::stargazer(train_scaled, type = 'text')
+```
+
+
+It's important to use the same parameters to transform the test dataset.
+
+```{r}
+# transform the test dataset using the parameters
+test_scaled <- predict(preprocessParams, test_data)
+
+# summarize the transformed dataset
+stargazer::stargazer(test_scaled, type = 'text')
+```
+
+From the above summary statistics, we notice that the mean and sd of the variables in the test dataset are not necessarily 0 and 1 respectively. This is because the rescaling parameters are only obtained from the training dataset.
+
+# 4. Support Vector Machine
+
+## 4.1. Try a Linear Kernel
+
+We can use the svm() method in the e1071 package to implement the SVM algorithm. Let's start with a linear kernel and parameter cost = 100.
+
+```{r}
+library(e1071)
+
+svm_corolla <- svm(Price~., data = train_scaled, 
+                   kernel = 'linear', cost = 100, scale = TRUE)
+
+summary(svm_corolla)
+
+```
+
+
+Test the performance of the SVM on the test dataset.
+
+```{r}
+# Predict on the scaled test dataset
+svm_yhat_scaled <- predict(svm_corolla, newdata = test_scaled)
+
+# Plot the normalized price and predicted normalized price
+plot(test_scaled$Price,svm_yhat_scaled)
+```
+
+From the above plot, we notice that the price is in a very small range. This is because we normalize data before predictive modeling.
+
+It makes more sense to transform the normalized data back to original scale when we evaluate the performance of the predictive model.
+
+```{r}
+# Transform the normalized price prediction to original scale
+svm_yhat <- svm_yhat_scaled*sd(train_data$Price) + mean(train_data$Price)
+
+# Plot the price and predicted price
+plot(test_data$Price,svm_yhat)
+```
+
+```{r}
+# Calcalate prediction performane measures
+postResample(svm_yhat, test_data$Price)
+```
+
+## 4.2. Tune a Linear Kernel
+
+Use 10-fold cross validation to fine tune a linear kernel.
+
+```{r}
+set.seed(1)
+# Tune the cost parameter for linear kernel
+tune_svm_linear <- tune(svm, Price~., data = train_scaled,
+                        kernel = 'linear',
+                        tunecontrol=tune.control(cross=10,sampling="cross"),
+                        ranges =list(cost=10^(-2:2)))
+
+summary(tune_svm_linear)
+```
+
+```{r}
+# Print the best parameters
+tune_svm_linear$best.parameters
+```
+
+```{r}
+# Print the best performance
+tune_svm_linear$best.performance
+```
+
+## 4.3. Tune a Radial (RBF) Kernel
+
+```{r}
+set.seed(1)
+# Tune the cost and gamma parameters for radial kernel
+tune_svm_radial <- tune(svm, Price~., data = train_scaled,
+                       kernel = 'radial',
+                       tunecontrol=tune.control(cross=10,sampling="cross"),
+                       ranges =list(cost=10^(-2:2),gamma=10^(-2:2)))
+
+# Print the best parameters
+tune_svm_radial$best.parameters
+```
+
+```{r}
+# Print the best performance
+tune_svm_radial$best.performance
+```
+
+## 4.4. Tune a Polynomial Kernel
+
+To simplify the hyper-parameter tuning, here we only set to fine tune the cost parameter.
+
+```{r}
+set.seed(1)
+# Tune the cost and gamma parameters for polynormial kernel
+tune_svm_poly <- tune(svm, Price~., data = train_scaled,
+                      kernel = 'polynomial', degree = 2,
+                      tunecontrol=tune.control(cross=10,sampling="cross"),
+                      ranges =list(cost=10^(-2:2)))
+
+# Print the best parameters
+tune_svm_poly$best.parameters
+```
+
+```{r}
+# Print the best performance
+tune_svm_poly$best.performance
+```
+
+## 4.5. Test the Best Model
+
+From the above model tuning process, we know that the best model is the radial kernel with cost = 10 and gamma = 0.01 as it has the best performance (lowest error). Let's test the performance of the best SVM on the test dataset.
+
+```{r}
+# Predict on the scaled test dataset
+svm_yhat2_scaled <- predict(tune_svm_radial$best.model, newdata = test_scaled)
+
+# Transform the normalized price prediction to original scale
+svm_yhat2 <- svm_yhat2_scaled*sd(train_data$Price) + mean(train_data$Price)
+
+# Plot the price and predicted price
+plot(test_data$Price,svm_yhat2)
+```
+
+
+```{r}
+# Calcalate prediction performane measures
+postResample(svm_yhat2, test_data$Price)
+```
+
+The best model has a better performance than the linear kernel in section 4.1.

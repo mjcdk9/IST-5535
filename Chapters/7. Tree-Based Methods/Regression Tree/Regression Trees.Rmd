@@ -1,0 +1,155 @@
+---
+title: "Regression Trees"
+author: "Langtao Chen"
+date: 'Initial: March 1, 2019 <br> Update: April 6, 2021'
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: 3
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: '3'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+&nbsp;
+&nbsp;
+
+
+\newpage
+
+```{r, echo=FALSE}
+# Clean the environment
+rm(list = ls())
+```
+
+# 1. Data
+
+As an example, let's use the CPU dataset to demonstrate how to implement regression tree.
+
+```{r}
+library(MASS)
+str(cpus)
+```
+
+The cpus dataset contains 209 CPUs of 9 variables including:
+
+- name: manufacturer and model.
+- syct: cycle time in nanoseconds.
+- mmin: minimum main memory in kilobytes.
+- mmax: maximum main memory in kilobytes.
+- cach: cache size in kilobytes.
+- chmin: minimum number of channels.
+- chmax: maximum number of channels.
+- perf: published performance on a benchmark mix relative to an IBM 370/158-3.
+- estperf: estimated performance (by Ein-Dor & Feldmesser).
+
+```{r}
+summary(cpus)
+```
+
+```{r}
+hist(cpus$perf,
+     main = 'Histogram of Performance',
+     xlab = 'Performance of CPU')
+```
+
+From the histogram, we can see that the distribution of performance is very skewed to the right. Let's log transform the performance variable to see whether we can alleviate the skewness issue. Indeed, log transformation makes its distribution more normal, as shown in the following histogram.
+
+
+```{r}
+hist(log(cpus$perf),
+     main = 'Histogram of Performance',
+     xlab = 'Performance of CPU (log)')
+```
+
+# 2. Split Data into Training and Test Sets
+
+Let's split the data into training set (50%) and test set (50%).
+
+```{r}
+set.seed(123)
+train <- sample(1:nrow(cpus), nrow(cpus)/2)
+
+# Num of observations in training set
+length(train)
+```
+
+# 3. Train A Regression Tree
+
+We use the tree() method in the tree package to fit a regression tree to the training data. 
+
+Note:
+
+- Since the performance is very skewed to the right, let's log transform it.
+- The name of a CPU is a unique identifier, so it cannot be used as a predictor.
+
+```{r}
+library(tree)
+
+# Fit a regression tree
+cpus_rt <- tree(log(perf) ~ syct+mmin+mmax+cach+chmin+chmax,
+                data = cpus[train,])
+
+# Print the regression tree
+cpus_rt
+```
+
+```{r}
+# Summary of the decision tree
+summary(cpus_rt)
+```
+
+From the summary, we notice that five variables (i.e., mmax, cach, mmin, syct, and chmin) are used to construct the tree.
+
+```{r}
+# Plot the decison tree
+plot(cpus_rt)
+text(cpus_rt, cex = 0.75, col = 'red')
+```
+
+Regression trees can be very non-robust. In other words, a small change in the data can cause a large change in the final estimated tree. Let's use remove the last 14 observations in the dataset and fit a regression tree model. From the following result, you can find that the tree structure has been significantly changed.
+
+```{r}
+# Fit a regression tree
+cpus_rt2 <- tree(log(perf) ~ syct+mmin+mmax+cach+chmin+chmax,
+                data = head(cpus[train,], 90))
+# Plot the regression tree
+plot(cpus_rt2)
+text(cpus_rt2, cex = 0.75, col = 'red')
+```
+
+The regression tree predicts a performance of 17.84994 [i.e., exp(2.882)] for CPUs with cach < 20, mmax < 6100, and chmax < 4.5.
+
+We can use the cv.tree() method to check if pruning the tree can improve performance by using k-fold cross-validation.
+
+```{r}
+cv_cpus <- cv.tree(cpus_rt)
+plot(cv_cpus$size, cv_cpus$dev, type='b', 
+     xlab = 'Tree Size', ylab = 'Deviance')
+```
+
+From the above cross-validation result, we can find the tree with the best performance for this case is the most complex tree (with 11 terminal nodes in the tree). So, there is no need to prune the tree. Next, we use the test dataset to test the formance of the regression tree.
+
+# 4. Test Performance of the Regression Tree
+
+As we log tranform the response variable, the predicted value of the response needs to be transformed back to the original scale.
+
+```{r}
+yhat <- exp(predict(cpus_rt, newdata = cpus[-train,]))
+yobs <- cpus[-train,'perf']
+
+plot(yhat, yobs)
+abline(0,1)
+```
+
+```{r}
+# Calculate performance of the tree
+library(caret)
+postResample(yhat, yobs)
+```
+

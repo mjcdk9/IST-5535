@@ -1,0 +1,166 @@
+---
+title: "Classification Trees"
+author: "Langtao Chen"
+date: 'Initial: March 1, 2019 <br> Update: April 6, 2021'
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: 3
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: '3'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+&nbsp;
+&nbsp;
+
+
+\newpage
+
+```{r, echo=FALSE}
+# Clean the environment
+rm(list = ls())
+```
+
+# 1. Data
+
+As an example, let's use the customer churn dataset to demonstrate how to implement classification tree.
+
+```{r}
+df <- read.csv('Telco-Customer-Churn.csv', stringsAsFactors = TRUE)
+str(df)
+```
+
+The response if the Churn column, which is a binary variable. 
+
+```{r}
+summary(df)
+```
+
+Since customuer ID is a unique identifier for each customer, let's remove it. There are 11 missing values in TotalCharges column. We remove all missing values from the dataset.
+
+```{r}
+df$CustomerID <- NULL
+df <- na.omit(df)
+```
+
+# 2. Split Data into Training and Test Sets
+
+Let's split the data into training set (50%) and test set (50%).
+
+```{r}
+set.seed(123)
+train <- sample(1:nrow(df), nrow(df)*0.5)
+
+train_df <- df[train,]
+test_df <- df[-train,]
+
+# Num of observations in training set
+nrow(train_df)
+```
+
+```{r}
+# Num of observations in test set
+nrow(test_df)
+```
+
+
+# 3. Train A Classification Tree
+
+We use the tree() method in the tree package to fit a classification tree to the training data. The syntax is very similar as the regression tree fit. 
+
+The tree() method will fit a regression tree if the response variable is continous, and a classification tree if the response variable is categorical.
+
+```{r}
+library(tree)
+
+# Fit a decision tree
+tree_churn <- tree(Churn ~., data = train_df)
+
+# Summary of the decision tree
+summary(tree_churn)
+```
+
+From the summary, we notice that only three variables (i.e., Contract, InternetService, and Tenure) are used to construct the tree.
+
+```{r}
+# Plot the decison tree
+plot(tree_churn)
+text(tree_churn, cex = 0.75, col = 'red')
+```
+
+From the above, we can see that factor labels have been shortened. To show the full names of factor levels, set the pretty parameter as FALSE.
+
+```{r}
+# Plot the decison tree
+plot(tree_churn)
+
+text(tree_churn, cex = 0.75, 
+     col = 'red', pretty = FALSE)
+```
+
+
+The classification tree predicts a customer will churn her service if she has a month-to-month contract, fiber-optic internet service, and tenure < 13.5. 
+
+# 4. Test Performance of the Classification Tree
+
+As we log tranform the response variable, the predicted value of the response needs to be transformed back to the original scale.
+
+```{r}
+yhat <- predict(tree_churn, newdata = test_df, type = 'class')
+yobs <- test_df$Churn
+
+library(caret)
+confusionMatrix(yhat, yobs, positive = 'Yes')
+```
+
+# 5. Prune the Tree
+
+From the plot of the classification tree shown in section 4, we notice that the tree has unnecessarily complicated structure:
+
+- If the customer has a one year or two year contract, we can simply predict that the customer will not churn her service. So there is no need to further evaluate if the contract is one year or not. That is to say, the 1st and 2nd terminal notes can be combined into a single one.
+
+- If the customer has a month-to-month contract and a DSL or no internet service, we don't need to further evaluate tenure. The customer churn can be classified as No. That is to say, the 3rd and 4th terminal notes in the tree plot in section 4 can be combined into a single one. 
+
+Thus, the above decision tree can be pruned.
+
+Generally speaking, an unpruned tree may overfit the data (low bias, high variance). By pruning the tree, we may improve its performance.
+
+Now, we check whether pruning the tree might lead to improved interpretation and some times better performance.
+
+```{r}
+cv_churn <- cv.tree(tree_churn, FUN=prune.misclass)
+cv_churn
+```
+
+```{r}
+plot(cv_churn$size, cv_churn$dev, type='b',
+     xlab = 'Tree Size', ylab = 'Deviance')
+```
+
+We find the misclassification would be the same if we prune the tree to keep 4 terminal notes. We can apply the prune.misclass() function in to prune the tree.
+
+```{r}
+tree_churn_pruned <- prune.misclass(tree_churn, best = 4)
+
+# Plot the pruned tree
+plot(tree_churn_pruned)
+
+text(tree_churn_pruned, cex = 0.75, 
+     col = 'red', pretty = FALSE)
+
+```
+
+We can test the performance of the pruned tree. As shown below, the pruned tree has the same performance as the unpruned tree. However, the pruned tree has a better interpretation as a smaller set of decisions rules are generated from the pruned tree. In addition, the pruned tree tends to have lower variance.
+
+```{r}
+yhat2 <- predict(tree_churn_pruned, newdata = test_df, type = 'class')
+
+library(caret)
+confusionMatrix(yhat2, yobs, positive = 'Yes')
+```

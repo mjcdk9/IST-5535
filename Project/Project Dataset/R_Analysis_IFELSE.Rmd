@@ -1,0 +1,219 @@
+---
+title: "Skyrim Steam Reviews"
+author: 'Group 2:  Joseph Bextermueller, Mark Chafin, David Ruitt, and Lauren Shaffer
+  IST 5535'
+date: "3/16/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+  rm(list = ls())
+```
+
+## 1. Read dataset
+```{r}
+  #install.packages("jsonlite") Will need this
+  library(jsonlite)
+  The_Elder_Scrolls_JSON <- "The_Elder_Scrolls_V.jsonlines"
+  
+  df.original <- stream_in(file(The_Elder_Scrolls_JSON))
+```
+
+## 2. Analyze
+
+##### Number of rows & columns
+```{r}
+  nrow(df.original)
+  ncol(df.original)
+```
+
+##### Head
+```{r}
+  head(df.original)
+```
+
+The rows represent the individual steam account associated with each review, and the columns represent the various attributes to each account such as: number of reviews, found helpful/unhelpful, review contents, etc.
+
+##### Barchart comparing helpful reviews and play hours
+```{r}
+  library(ggplot2)
+
+#100 hours
+  ggplot(df.original, aes(x=total_game_hours, fill=num_found_helpful)) + geom_bar(position=position_dodge()) + coord_flip() + xlim(0,100) + ylim(0,10) +
+    labs(
+      title = "Distribution of game hours and helpful reviews (100 hours)",
+      x = "Total game hours",
+      y = "Reviews found helpful"
+    )
+
+#200 hours
+    ggplot(df.original, aes(x=total_game_hours, fill=num_found_helpful)) + geom_bar(position=position_dodge()) + coord_flip() + xlim(100,200) + ylim(0,10) +
+    labs(
+      title = "Distribution of game hours and helpful reviews (200 hours)",
+      x = "Total game hours",
+      y = "Reviews found helpful"
+    )
+
+#300 hours
+      ggplot(df.original, aes(x=total_game_hours, fill=num_found_helpful)) + geom_bar(position=position_dodge()) + coord_flip() + xlim(200,300) + ylim(0,10) +
+    labs(
+      title = "Distribution of game hours and helpful reviews (100 hours)",
+      x = "Total game hours",
+      y = "Reviews found helpful"
+    )
+
+#400 hours
+      ggplot(df.original, aes(x=total_game_hours, fill=num_found_helpful)) + geom_bar(position=position_dodge()) + coord_flip() + xlim(300,400) + ylim(0,10) +
+    labs(
+      title = "Distribution of game hours and helpful reviews (100 hours)",
+      x = "Total game hours",
+      y = "Reviews found helpful"
+    )
+      
+#500 hours
+      ggplot(df.original, aes(x=total_game_hours, fill=num_found_helpful)) + geom_bar(position=position_dodge()) + coord_flip() + xlim(400,500) + ylim(0,10) +
+    labs(
+      title = "Distribution of game hours and helpful reviews (100 hours)",
+      x = "Total game hours",
+      y = "Reviews found helpful"
+    )
+```
+
+When graphing this we see that playtime and finding reviews helpful varies greatly. The graph was split for accurate reading.
+
+We see that the vast majority of interactions with reviews and play time is within the range of 100 to 200 hours. This makes sense, as players will rarely exceed those playtimes for given games. We see that those with fewer hours interact with reviews far more than those who have more hours. This makes sense practically, as those who put many hours in a video game are less likely to read reviews for a given game, given that they enjoy it enough to spend many hours playing it.
+
+##### Barchart comparing funny reviews and play hours
+```{r}
+#100 hours
+  ggplot(df.original, aes(x=total_game_hours, fill=num_found_funny)) + geom_bar(position=position_dodge()) + coord_flip() + xlim(0,100) + ylim(0,10) +
+    labs(
+      title = "Distribution of game hours and helpful reviews (100 hours)",
+      x = "Total game hours",
+      y = "Reviews found funny"
+    )
+
+#200 hours
+  ggplot(df.original, aes(x=total_game_hours, fill=num_found_funny)) + geom_bar(position=position_dodge()) + coord_flip() + xlim(100,200) + ylim(0,10) +
+    labs(
+      title = "Distribution of game hours and helpful reviews (100 hours)",
+      x = "Total game hours",
+      y = "Reviews found funny"
+    )
+  
+#300 hours
+  ggplot(df.original, aes(x=total_game_hours, fill=num_found_funny)) + geom_bar(position=position_dodge()) + coord_flip() + xlim(200,300) + ylim(0,10) +
+    labs(
+      title = "Distribution of game hours and helpful reviews (100 hours)",
+      x = "Total game hours",
+      y = "Reviews found funny"
+    )
+  
+#400 hours
+  ggplot(df.original, aes(x=total_game_hours, fill=num_found_funny)) + geom_bar(position=position_dodge()) + coord_flip() + xlim(300,400) + ylim(0,10) +
+    labs(
+      title = "Distribution of game hours and helpful reviews (100 hours)",
+      x = "Total game hours",
+      y = "Reviews found funny"
+    )
+  
+#500 hours
+  ggplot(df.original, aes(x=total_game_hours, fill=num_found_funny)) + geom_bar(position=position_dodge()) + coord_flip() + xlim(400,500) + ylim(0,10) +
+    labs(
+      title = "Distribution of game hours and helpful reviews (100 hours)",
+      x = "Total game hours",
+      y = "Reviews found funny"
+    )
+```
+
+The previous findings bring another question, especially with the context of Skyrim. Do those who spend more hours in a game post funny reviews? Many most likely have seen reviews from players with hundreds of hours in the game posting humorous reviews.
+
+However, we see a trend similar to our previous findings.
+
+##### Barchart comparing unhelpful reviews and play hours
+```{r}
+#100 hours
+  ggplot(df.original, aes(x=total_game_hours, fill=num_found_unhelpful)) + geom_bar(position=position_dodge()) + coord_flip() + xlim(0,100) + ylim(0,10) +
+    labs(
+      title = "Distribution of game hours and helpful reviews (100 hours)",
+      x = "Total game hours",
+      y = "Reviews found unhelpful"
+    )
+
+#200 hours
+  ggplot(df.original, aes(x=total_game_hours, fill=num_found_unhelpful)) + geom_bar(position=position_dodge()) + coord_flip() + xlim(100,200) + ylim(0,10) +
+    labs(
+      title = "Distribution of game hours and helpful reviews (100 hours)",
+      x = "Total game hours",
+      y = "Reviews found unhelpful"
+    )
+  
+#300 hours
+  ggplot(df.original, aes(x=total_game_hours, fill=num_found_unhelpful)) + geom_bar(position=position_dodge()) + coord_flip() + xlim(200,300) + ylim(0,10) +
+    labs(
+      title = "Distribution of game hours and helpful reviews (100 hours)",
+      x = "Total game hours",
+      y = "Reviews found unhelpful"
+    )
+  
+#400 hours
+  ggplot(df.original, aes(x=total_game_hours, fill=num_found_unhelpful)) + geom_bar(position=position_dodge()) + coord_flip() + xlim(300,400) + ylim(0,10) +
+    labs(
+      title = "Distribution of game hours and helpful reviews (100 hours)",
+      x = "Total game hours",
+      y = "Reviews found unhelpful"
+    )
+
+#500 hours
+  ggplot(df.original, aes(x=total_game_hours, fill=num_found_unhelpful)) + geom_bar(position=position_dodge()) + coord_flip() + xlim(400,500) + ylim(0,10) +
+    labs(
+      title = "Distribution of game hours and helpful reviews (100 hours)",
+      x = "Total game hours",
+      y = "Reviews found unhelpful"
+    )
+```
+
+Again, our trend is similar. The vast majority of interaction occurs with those with game hours between 0 to 200. 
+
+##### Real or fake?
+
+Now the question is how do we distinguish between a real review and a humorous one? Once we do this, how do they relate with play hours?
+```{r}
+  #print(df.original$review)
+    # Commented out for knitting purposes
+```
+
+When examining the reviews we see the vast majority of humor reviews are those that tend to be short. So we can frame the question as: Long reviews vs Short reviews. Then we can compare each with helpfulness/unhelpfullness/funny.
+```{r}
+  df.original$is_short_review <- ifelse(nchar(df.original$review)<120,1,0)
+  df.original$is_long_review <- ifelse(nchar(df.original$review)>120,1,0)
+```
+
+Now, lets see how length plays a role in categorizing reviews. Due to previous findings we will work within 0-200 hours.
+```{r}
+  #Short reviews found helpful or unhelpful
+  barplot(with(df.original, table(num_found_helpful, is_short_review)), main = "Short Reviews found Helpful or Unhelpful", col=1)
+
+  #Short reviews found funny
+  barplot(with(df.original, table(num_found_funny, is_short_review)), main = "Short Reviews found Funny or Unfunny", col=1)
+```
+
+Now lets do the same with long reviews.
+```{r}
+  #Long reviews found helpful or unhelpful
+  barplot(with(df.original, table(num_found_helpful, is_long_review)), main = "Long Reviews found Helpful or Unhelpful", col=1)
+
+  #Short reviews found funny
+  barplot(with(df.original, table(num_found_funny, is_long_review)), main = "Long Reviews found Funny or Unfunny", col=1)
+```
+
+In our findings here we see that both short and long reviews are fairly balanced in both categories of helpful/unhelpful and funny/unfunny. However, we see that longer reviews slightly lead in being helpful and funny over shorter ones.
+
+#### Next, we can text mine these reviews to see which words tend to be repeated under each category (helpful,unhelpful, funny).
+```{r}
+
+```
