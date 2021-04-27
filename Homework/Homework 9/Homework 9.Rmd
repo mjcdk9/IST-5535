@@ -1,0 +1,283 @@
+---
+title: "Homework 9"
+author: "Mark Chafin"
+date: "4/23/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls())
+Start_time <- Sys.time()
+library(dplyr)
+```
+
+
+```{r}
+#import df and show structure
+df <- read.csv("DC_Bike_Rentals.csv")
+str(df)
+```
+
+
+```{r}
+# Factor data as levels
+
+df$season <- as.factor(df$season)
+levels(df$season) <- c("spring", "summer", "winter", "fall")
+
+
+df$holiday <- as.factor(df$holiday)
+levels(df$holiday) <- c("no","yes")
+
+
+df$workingday <- as.factor(df$workingday)
+levels(df$workingday) <- c("no", "yes")
+
+df$weather <- as.factor(df$weather)
+levels(df$weather) <- c("Clear", "Cloudy", "Light Precipitation", "Heavy Precipitation")
+
+```
+
+# 3
+
+```{r}
+# split 30/70 - test/train
+
+library(caret)
+set.seed(123)
+trainIndex <- createDataPartition(df$count , p = .7, list = FALSE)
+
+train_data <- df[ trainIndex,]
+test_data  <- df[-trainIndex,]
+
+nrow(train_data)
+```
+
+# 1.	Train a regression tree to predict count of bike rental on the training set. Prune the regression tree by using a best parameter identified through a cross-validation. Train the pruned regression model. 
+```{r}
+library(tree)
+
+train_tree <- tree(log(count) ~ season+holiday+workingday+weather+temp+atemp+humidity+windspeed, data = train_data)
+
+train_tree
+
+summary(train_tree)
+
+plot(train_tree)
+text(train_tree, cex = 0.75, col = "Blue")
+
+
+```
+
+
+
+```{r}
+# CV on tree to see if pruning is required
+
+cv_train_tree <- cv.tree(train_tree)
+plot(cv_train_tree$size, cv_train_tree$dev, type='b', xlab = 'Tree Size', ylab = 'Deviance')
+```
+
+
+```{r}
+# Test performance of regression tree
+
+yhat <- exp(predict(train_tree, newdata = train_data))
+yobs <- train_data$count
+
+plot(yhat, yobs)
+abline(0,1)
+
+# calculate performance of tree
+postResample(yhat,yobs)
+
+```
+
+
+
+
+
+
+
+# 2. Train a random forest model to predict count of  bike rental on the training set
+```{r}
+library(randomForest)
+rf <-  randomForest(count~., data = train_data, mtry = 5, importance = TRUE)
+rf
+
+```
+
+
+```{r}
+# Use 10-fold cross-validation to run a parameter tuning process to find the optimal value of parameter "mtry"
+
+tune <- data.frame(mtry = 1:9)
+tune
+```
+
+
+```{r}
+library(lubridate)
+control <- trainControl(method = 'repeatedcv', number = 10, repeats = 3)
+set.seed(123)
+rf_tune <- train(count~., data = train_data, method = 'rf'
+, trControl = control, tuneGrid = tune)
+
+rf_tune
+plot(rf_tune)
+
+```
+
+
+# Fit the final model with the optimal mtry on the training set
+```{r}
+library(randomForest)
+rf <-  randomForest(count~., data = train_data, mtry = 5, importance = TRUE)
+rf
+
+```
+
+# 3 
+  Train a support vector machine model to predict count of bike rental on the training set. The svm() method in the e1071 can also be used for regression problems. Use a 10-fold cross-validation to run a parameter tuning process to find the optimal kernel among linear, RBF, and polynomial kernels. Fit the final SVM model with the optimal kernel on the whole training set.
+
+```{r}
+library(e1071)
+
+# calculate the pre-process parameters from the training dataset
+preprocessParams <- preProcess(train_data, method = c("scale","center"))
+
+# summarize transform parameters
+preprocessParams
+
+
+
+
+```
+
+```{r}
+# transform the training dataset using the parameters
+train_scaled <- predict(preprocessParams, train_data)
+
+# summarize the transformed dataset
+stargazer::stargazer(train_scaled, type = 'text')
+
+```
+
+```{r}
+# transform the test dataset using the parameters
+test_scaled <- predict(preprocessParams, test_data)
+
+# summarize the transformed dataset
+stargazer::stargazer(test_scaled, type = 'text')
+```
+
+```{r}
+svm_bike <- svm(count~., data = train_scaled, kernel = 'linear', cost = 100, scale = TRUE)
+
+summary(svm_bike)
+```
+
+# Test the performance of the SVM on the test dataset.
+```{r}
+# Predict on the scaled test dataset
+svm_yhat_scaled <- predict(svm_bike, newdata = test_scaled)
+
+
+# Plot the normalized price and predicted normalized price
+plot(test_scaled$count,svm_yhat_scaled)
+```
+
+```{r}
+# Transform the normalized price prediction to original scale
+svm_yhat <- svm_yhat_scaled*sd(train_data$count) + mean(train_data$count)
+# Plot the price and predicted price
+plot(test_data$count,svm_yhat)
+```
+
+
+```{r}
+# Calcalate prediction performane measures
+postResample(svm_yhat, test_data$count)
+```
+
+
+```{r}
+set.seed(123)
+# Tune the cost parameter for linear kernel
+tune_svm_linear <- tune(svm, count~., data = train_scaled,
+                        kernel = 'linear',
+                        tunecontrol = tune.control(cross = 10, sampling = 'cross'), ranges = list(cost = 10^(-2:2)))
+
+summary(tune_svm_linear)
+```
+
+```{r}
+# Print the best parameters
+tune_svm_linear$best.parameters
+```
+
+```{r}
+# Print the best performance
+tune_svm_linear$best.performance
+```
+
+
+# Tunning a Radial (RBF) Kernel
+```{r}
+set.seed(123)
+# Tune the cost and gamma parameters for radial kernel
+tune_svm_radial <- tune(svm, count~., data = train_scaled,
+                        kernel = 'radial',
+                        tunecontrol = tune.control(cross = 10, sampling = 'cross'), ranges = list(cost = 10^(-2:2), gamma=10^(-2:2)))
+# Print the best parameters
+tune_svm_radial$best.parameters
+```
+
+```{r}
+# Print the best performance
+tune_svm_radial$best.performance
+```
+
+# Tuning a polynomial Kernel
+```{r}
+set.seed(123)
+# Tune the cost and gamma parameters for radial kernel
+tune_svm_poly <- tune(svm, count~., data = train_scaled,
+                        kernel = 'polynomial', degree = 2,
+                        tunecontrol = tune.control(cross = 10, sampling = 'cross'), ranges = list(cost = 10^(-2:2)))
+# Print the best parameters
+tune_svm_poly$best.parameters
+```
+
+```{r}
+# Print the best performance
+tune_svm_poly$best.performance
+```
+
+# Test the Best Model
+```{r}
+# Predict on the scaled test dataset
+svm_yhat2_scaled <- predict(tune_svm_linear$best.model, newdata = test_scaled) 
+
+# Transform the normalized price prediction to original scale
+svm_yhat2 <- svm_yhat2_scaled*sd(train_data$count) + mean(train_data$count)
+
+# Plot the price and predicted price
+plot(test_data$count,svm_yhat2)
+```
+
+```{r}
+# Calcalate prediction performane measures
+postResample(svm_yhat2, test_data$count)
+```
+
+```{r}
+End_time <- Sys.time()
+Total_time <- End_time - Start_time
+
+Total_time
+```
+
+
+
